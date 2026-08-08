@@ -15,25 +15,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Loads a data-driven wiki's pages from assets/&lt;namespace&gt;/&lt;basePath&gt;/&lt;locale&gt;/*.md,
- * falling back to en_us if the current locale has no matching pages, then overlays any matching
- * files from config/&lt;namespace&gt;/&lt;basePath&gt;/&lt;locale&gt;/ on top - shipped defaults vs. an
- * editable, in-game-writable copy. A config file with the same filename as a shipped page overrides
- * it; a config file with a new filename is an additional page appended after the shipped ones.
- * Pages may live in a one-level-deep subfolder (both under assets/ and config/) to group them into
- * a chapter - see Page.chapter(). Fully mod-agnostic - only vanilla Minecraft resource-manager APIs,
- * nothing tied to any specific host mod - pass your own namespace/basePath when calling
- * loadPages(...), so one copy of this class can serve multiple host mods at once.
- */
 public final class WikiPageLoader {
 
     private WikiPageLoader() {}
 
     private static final String DEFAULT_LOCALE = "en_us";
 
-    /** chapter is the immediate subfolder name a page lives in (e.g. wiki/en_us/getting_started/
-     * 01_overview.md -&gt; chapter "getting_started"), null for pages directly in the locale root. */
     public record Page(String id, String title, String markdown, String filename, String chapter) {
 
         public String chapterLabel() {
@@ -41,7 +28,6 @@ public final class WikiPageLoader {
         }
     }
 
-    /** "getting_started" -&gt; "Getting Started". Null in, null out. */
     public static String prettifyChapter(String chapter) {
         if (chapter == null) return null;
         StringBuilder sb = new StringBuilder();
@@ -72,7 +58,6 @@ public final class WikiPageLoader {
                 .resolve("config").resolve(namespace).resolve(basePath).resolve(locale);
     }
 
-    /** Writes (creating or overwriting) a page's markdown to the editable config/ location. */
     public static void savePage(String namespace, String basePath, String locale, String filename, String markdown)
                                                                                                                     throws IOException {
         Path dir = configDir(namespace, basePath, locale);
@@ -80,7 +65,6 @@ public final class WikiPageLoader {
         Files.writeString(dir.resolve(filename), markdown, StandardCharsets.UTF_8);
     }
 
-    /** Picks the next free "NN_" numeric prefix given the currently loaded pages' filenames. */
     public static String nextFilename(List<Page> pages, String slug) {
         int max = 0;
         for (Page p : pages) {

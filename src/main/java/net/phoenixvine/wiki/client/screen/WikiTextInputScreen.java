@@ -14,13 +14,6 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.function.Consumer;
 
-/**
- * A generic multiline markdown text editor screen with a formatting toolbar (bold/italic/heading/
- * list/link/tip/reset/page-break buttons, a hex color picker, and the 16 legacy color codes).
- * Zero dependency on any specific host mod's theme system - colors are hardcoded here. Used by
- * WikiScreen for its in-game page editor, but generic enough to reuse for any (parent, label,
- * initialText, maxLength, onConfirm) text-editing need.
- */
 @OnlyIn(Dist.CLIENT)
 public class WikiTextInputScreen extends Screen {
 

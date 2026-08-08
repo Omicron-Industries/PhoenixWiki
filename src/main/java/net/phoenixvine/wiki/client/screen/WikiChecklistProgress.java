@@ -11,12 +11,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Persists per-player checked state for wiki checklist items (- [ ] / - [x]) across sessions, at
- * config/&lt;namespace&gt;/wiki_checklist_progress.dat. Namespace-scoped (both the file and the
- * in-memory cache) so this single class can back multiple host mods jar-in-jar'd together without
- * their checklist state colliding.
- */
 public final class WikiChecklistProgress {
 
     private static final Map<String, Boolean> STATE = new HashMap<>();
@@ -25,7 +19,6 @@ public final class WikiChecklistProgress {
 
     private WikiChecklistProgress() {}
 
-    /** Call once with the game directory (e.g. Minecraft.getInstance().gameDirectory.toPath()). */
     public static void init(Path gameDir) {
         configRoot = gameDir.resolve("config");
     }

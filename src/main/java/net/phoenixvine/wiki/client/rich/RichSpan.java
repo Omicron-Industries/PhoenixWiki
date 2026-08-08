@@ -8,9 +8,6 @@ public sealed interface RichSpan
                                  RichSpan.CodeCopy, RichSpan.ItemIcon, RichSpan.DetailsToggle, RichSpan.TocJump,
                                  RichSpan.ChecklistToggle {
 
-    /** background is an ARGB int (0 = none) filled behind the text, e.g. for ==highlight==,
-     * `code`, and &lt;kbd&gt; spans. copyText is non-null only for inline code spans - clicking
-     * one copies it to the clipboard, same as a fenced code block's copy button. */
     record Text(String text, Style style, int background, String copyText) implements RichSpan {
         public Text(String text, Style style) {
             this(text, style, 0, null);
@@ -27,19 +24,18 @@ public sealed interface RichSpan
 
     record Image(ResourceLocation texture, int w, int h) implements RichSpan {}
 
-    /** Renders the actual item icon (with vanilla item rendering, tint/glint included) for [item:id]. */
-    record ItemIcon(ResourceLocation itemId) implements RichSpan {}
+    record ItemIcon(ResourceLocation itemId, String tooltip) implements RichSpan {
+        public ItemIcon(ResourceLocation itemId) {
+            this(itemId, null);
+        }
+    }
 
-    /** Not rendered inline - used only as the payload of a click Region over a code block's copy button. */
     record CodeCopy(String code) implements RichSpan {}
 
-    /** Not rendered inline - payload of a click Region over a collapsible section's header. */
     record DetailsToggle(String key) implements RichSpan {}
 
-    /** Not rendered inline - payload of a click Region over an on-page table-of-contents entry. */
     record TocJump(int targetY) implements RichSpan {}
 
-    /** Not rendered inline - payload of a click Region over a checklist item's checkbox glyph. */
     record ChecklistToggle(String key, boolean checkedDefault) implements RichSpan {}
 
     record Region(int x1, int y1, int x2, int y2, RichSpan span) {

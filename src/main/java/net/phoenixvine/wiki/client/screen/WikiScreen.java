@@ -5,9 +5,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
 import net.phoenixvine.wiki.client.rich.RichBlock;
 import net.phoenixvine.wiki.client.rich.RichSpan;
 import net.phoenixvine.wiki.client.rich.WikiMarkdownParser;
@@ -25,22 +22,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.UnaryOperator;
 
-/**
- * In-game data-driven wiki screen. Renders markdown pages loaded by WikiPageLoader for a given
- * (namespace, basePath) pair - e.g. new WikiScreen(parent, "your_mod_id", "wiki") reads
- * assets/your_mod_id/wiki/&lt;locale&gt;/*.md, overlaid by config/your_mod_id/wiki/&lt;locale&gt;/*.md
- * for in-game edits. One host mod can open as many independent WikiScreen instances as it wants
- * (different namespace/basePath each), and this same jar-in-jar'd class can back multiple host
- * mods at once without their pages/checklist state colliding.
- *
- * <p>Everything markdown-related - headings, bold/italic/strikethrough/highlight, lists,
- * checklists, tables (wrapping), fenced code blocks (syntax highlighting + copy, inline code copy),
- * blockquotes, callouts, collapsible sections, footnotes, internal wiki: links, [item:id] icons,
- * an on-page table of contents, and full-text search (jumps to the actual matching block, not just
- * the matching page) - works out of the box. The only thing a host mod might want to customize is
- * {@link #dynamicPageResolvers()}, for pages that substitute {{tokens}} with live data; override it
- * in a subclass if needed, it returns an empty map by default.
- */
 public class WikiScreen extends Screen {
 
     private static final Logger LOGGER = LogManager.getLogger("PhoenixWiki");
@@ -81,7 +62,6 @@ public class WikiScreen extends Screen {
     private boolean tocOpen = true;
     private EditBox searchBox;
 
-    /** One row in the sidebar list: either a chapter header (pageIndex -1) or a page. */
     private record SidebarEntry(boolean isHeader, String chapter, int pageIndex) {}
 
     public WikiScreen(Screen parent, String namespace, String basePath) {
@@ -231,8 +211,6 @@ public class WikiScreen extends Screen {
         return page.title().toLowerCase().contains(q) || page.markdown().toLowerCase().contains(q);
     }
 
-    /** Scrolls the active page to the first rendered block whose actual text contains the query,
-     * instead of only telling the user which page matched. */
     private void jumpToSearchMatch(String q) {
         if (pages.isEmpty()) return;
         List<RichBlock> blocks = activeBlocks();
@@ -288,7 +266,6 @@ public class WikiScreen extends Screen {
         });
     }
 
-    /** Persists checklist checkmarks across sessions via WikiChecklistProgress. */
     private void seedChecklistState(String pageId, List<RichBlock> blocks) {
         ensureChecklistTrackerInit();
         for (RichBlock b : blocks) {
@@ -322,11 +299,6 @@ public class WikiScreen extends Screen {
         return resolver != null ? resolver.apply(page.markdown()) : page.markdown();
     }
 
-    /**
-     * Page-id -&gt; function map that lets specific pages substitute {{tokens}} in their markdown
-     * with live data. Empty by default; override in a subclass if your wiki needs this (e.g. a
-     * "live stats" page that pulls numbers from your own mod's registries at render time).
-     */
     protected Map<String, UnaryOperator<String>> dynamicPageResolvers() {
         return Map.of();
     }
@@ -423,14 +395,13 @@ public class WikiScreen extends Screen {
                 g.pose().popPose();
                 break;
             }
-            if (r.span() instanceof RichSpan.ItemIcon icon) {
-                Item item = ForgeRegistries.ITEMS.getValue(icon.itemId());
-                if (item != null) {
-                    g.pose().pushPose();
-                    g.pose().translate(0f, 0f, 500f);
-                    g.renderTooltip(font, new ItemStack(item).getHoverName(), mx, my);
-                    g.pose().popPose();
-                }
+            if (r.span() instanceof RichSpan.ItemIcon icon && icon.tooltip() != null && !icon.tooltip().isBlank()) {
+                g.pose().pushPose();
+                g.pose().translate(0f, 0f, 500f);
+                List<net.minecraft.util.FormattedCharSequence> lines =
+                        font.split(Component.literal(icon.tooltip()), 240);
+                g.renderTooltip(font, lines, mx, my);
+                g.pose().popPose();
                 break;
             }
         }

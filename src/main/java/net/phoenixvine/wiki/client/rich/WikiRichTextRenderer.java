@@ -30,19 +30,10 @@ public final class WikiRichTextRenderer {
     private static final int GAP_HEADING_AFTER = 2;
     private static final int GAP_BLANK = 4;
 
-    /**
-     * Resolves [img:...] resource locations before drawing. Defaults to identity (works for any
-     * mod out of the box). Point this at your own dynamic-texture-registration system if you have
-     * one, e.g. {@code WikiRichTextRenderer.imageResolver = CustomTextureCache::resolve;} -
-     * this is the ONE thing in this file that used to hardcode a specific mod's class, so it's a
-     * plain settable field now instead, to keep this class copy-paste portable across projects.
-     */
     public static java.util.function.UnaryOperator<ResourceLocation> imageResolver =
             java.util.function.UnaryOperator.identity();
 
     private WikiRichTextRenderer() {}
-
-    // ---------- Flat span-list entry points (used by quest description rendering) ----------
 
     public static List<RichSpan.Region> render(
                                                GuiGraphics g, Font font,
@@ -88,8 +79,6 @@ public final class WikiRichTextRenderer {
         hcNext = (hcNext + 1) % HEIGHT_CACHE_SLOTS;
         return height;
     }
-
-    // ---------- Block-list entry points (used by the wiki) ----------
 
     public static List<RichSpan.Region> renderBlocks(
                                                      GuiGraphics g, Font font,
@@ -143,7 +132,6 @@ public final class WikiRichTextRenderer {
 
     public record HeadingInfo(int level, String text, int y) {}
 
-    /** Top-level headings only (does not descend into callouts/collapsible sections), for an on-page TOC. */
     public static List<HeadingInfo> computeHeadingOffsets(Font font, List<RichBlock> blocks, int maxW) {
         List<HeadingInfo> out = new ArrayList<>();
         int y = 0;
@@ -173,8 +161,6 @@ public final class WikiRichTextRenderer {
         }
         return sb.toString();
     }
-
-    // ---------- Recursive block rendering (handles nested Callout/Details containers) ----------
 
     private static int renderBlockList(GuiGraphics g, Font font, List<RichBlock> blocks, int x, int y, int maxW,
                                        int clipTop, int clipBot, List<RichSpan.Region> regions, float scale,
@@ -370,8 +356,6 @@ public final class WikiRichTextRenderer {
         return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
-    // ---------- Code block rendering with lightweight syntax highlighting ----------
-
     private record HToken(String text, int color) {}
 
     private static final Set<String> JAVA_KEYWORDS = Set.of(
@@ -528,8 +512,7 @@ public final class WikiRichTextRenderer {
 
     private static List<List<HToken>> wrapCodeLines(Font font, String lang, String code, int maxW) {
         int innerW = Math.max(8, maxW - 8);
-        // The copy button sits over the top-right corner of the box, so the very first visual
-        // line needs to wrap well before the box edge or its text runs under the button.
+
         int btnReserve = font.width("⎘") + 8 + 10;
         int firstLineW = Math.max(8, innerW - btnReserve);
         List<List<HToken>> visualLines = new ArrayList<>();
@@ -583,8 +566,6 @@ public final class WikiRichTextRenderer {
         }
         return lo;
     }
-
-    // ---------- Recursive block measuring ----------
 
     private static int measureBlockList(Font font, List<RichBlock> blocks, int maxW, int y, float scale,
                                         Set<String> expandedKeys) {
@@ -704,8 +685,6 @@ public final class WikiRichTextRenderer {
         }
         return out;
     }
-
-    // ---------- Flat span rendering (shared by both entry points) ----------
 
     private static void renderSpanList(GuiGraphics g, Font font, List<RichSpan> spans,
                                        int x, int[] curY, int originX, int maxW,

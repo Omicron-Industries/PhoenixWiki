@@ -327,8 +327,13 @@ public final class WikiMarkdownParser {
                     }
                     if (inner.startsWith("item:")) {
                         flush(buf, currentStyle, currentBackground, out);
+                        String itemPart = inner.substring(5);
+                        int bar = itemPart.indexOf('|');
+                        String idPart = bar >= 0 ? itemPart.substring(0, bar) : itemPart;
+                        String tooltip = bar >= 0 ? itemPart.substring(bar + 1).trim() : null;
+                        if (tooltip != null && tooltip.isEmpty()) tooltip = null;
                         try {
-                            out.add(new RichSpan.ItemIcon(new ResourceLocation(inner.substring(5).trim())));
+                            out.add(new RichSpan.ItemIcon(new ResourceLocation(idPart.trim()), tooltip));
                         } catch (Exception ignored) {}
                         i = bracketEnd + 1;
                         continue;
@@ -395,12 +400,6 @@ public final class WikiMarkdownParser {
         return out;
     }
 
-    /**
-     * Straight double quotes render as a solid block in vanilla Minecraft's font when bold
-     * (the font's fake-bold double-stroke collapses that particular narrow glyph) - swap them for
-     * typographic curly quotes, which don't have that problem. Skips text inside backtick code
-     * spans, where quotes should stay literal.
-     */
     private static String smartQuotes(String input) {
         if (input.indexOf('"') < 0) return input;
         StringBuilder out = new StringBuilder(input.length());

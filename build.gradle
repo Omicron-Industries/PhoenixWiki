@@ -97,3 +97,14 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
     options.release.set(17)
 }
+
+tasks.register('publishToChronicles', Copy) {
+    group = 'phoenix'
+    description = 'Builds this mod and copies the jar into ../PhoenixChronicles/libs, so Chronicles picks up local changes.'
+    dependsOn 'reobfJar'
+    from(layout.buildDirectory.dir('libs')) {
+        include '*.jar'
+        exclude '*-sources.jar'
+    }
+    into '../PhoenixChronicles/libs'
+}
