@@ -8,13 +8,21 @@ public sealed interface RichSpan
                                  RichSpan.CodeCopy, RichSpan.ItemIcon, RichSpan.DetailsToggle, RichSpan.TocJump,
                                  RichSpan.ChecklistToggle {
 
-    record Text(String text, Style style, int background, String copyText) implements RichSpan {
+    // scale is a per-span multiplier stacked on top of whatever ambient scale the block it's in
+    // already renders at (page default, heading level, bold) - set via an inline {scale:1.4} token,
+    // see WikiMarkdownParser.parseInline(). Defaults to 1f for every existing call site/constructor
+    // below, so nothing needed to opt out of it.
+    record Text(String text, Style style, int background, String copyText, float scale) implements RichSpan {
         public Text(String text, Style style) {
-            this(text, style, 0, null);
+            this(text, style, 0, null, 1f);
         }
 
         public Text(String text, Style style, int background) {
-            this(text, style, background, null);
+            this(text, style, background, null, 1f);
+        }
+
+        public Text(String text, Style style, int background, String copyText) {
+            this(text, style, background, copyText, 1f);
         }
     }
 

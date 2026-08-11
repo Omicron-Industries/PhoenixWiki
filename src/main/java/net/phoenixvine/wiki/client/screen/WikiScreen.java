@@ -216,13 +216,14 @@ public class WikiScreen extends Screen {
         List<RichBlock> blocks = activeBlocks();
         int cw = width - sidebarW - MARGIN * 2;
         if (cw <= 0) return;
+        float scale = pageScale(blocks);
         int y = 0;
         for (int i = 0; i < blocks.size(); i++) {
             if (blockContainsText(blocks.get(i), q)) {
                 scrollY = Math.max(0, y - 10);
                 return;
             }
-            y = WikiRichTextRenderer.measureBlocksHeight(font, blocks.subList(i, i + 1), cw, expandedKeys) + y;
+            y = WikiRichTextRenderer.measureBlocksHeight(font, blocks.subList(i, i + 1), cw, scale, expandedKeys) + y;
         }
         scrollY = 0;
     }
@@ -236,6 +237,11 @@ public class WikiScreen extends Screen {
         if (b instanceof RichBlock.Details d) {
             for (RichBlock child : d.children()) if (blockContainsText(child, lowerQ)) return true;
             return d.title() != null && d.title().toLowerCase().contains(lowerQ);
+        }
+        if (b instanceof RichBlock.CollapsibleSection s) {
+            for (RichSpan span : s.headingSpans()) if (spanText(span).toLowerCase().contains(lowerQ)) return true;
+            for (RichBlock child : s.children()) if (blockContainsText(child, lowerQ)) return true;
+            return false;
         }
         if (b instanceof RichBlock.Table t) {
             for (List<RichSpan> row : t.header())
@@ -301,6 +307,23 @@ public class WikiScreen extends Screen {
 
     protected Map<String, UnaryOperator<String>> dynamicPageResolvers() {
         return Map.of();
+    }
+
+    /**
+     * WikiRichTextRenderer.DEFAULT_SCALE, further multiplied by a page's own {@code {scale:1.2}}
+     * directive if it has one anywhere in its source (see WikiMarkdownParser.ScaleDirective) -
+     * that's the "control in markdown" escape hatch for a page that wants to run bigger/smaller
+     * than the shared default, e.g. a page that's mostly one big diagram callout.
+     */
+    private float pageScale(List<RichBlock> blocks) {
+        float mult = 1.0f;
+        for (RichBlock b : blocks) {
+            if (b instanceof RichBlock.ScaleDirective sd) {
+                mult = sd.multiplier();
+                break;
+            }
+        }
+        return WikiRichTextRenderer.DEFAULT_SCALE * mult;
     }
 
     @Override
@@ -375,14 +398,15 @@ public class WikiScreen extends Screen {
 
         g.enableScissor(cx, contentTop, cx + cw, contentBot);
         List<RichBlock> blocks = activeBlocks();
+        float scale = pageScale(blocks);
         richRegions = WikiRichTextRenderer.renderBlocks(g, font, blocks, cx, contentTop, cw,
-                scrollY, contentTop, contentBot, theme.accent(), expandedKeys);
+                scrollY, contentTop, contentBot, scale, theme.accent(), expandedKeys);
         g.disableScissor();
 
-        cachedContentH = WikiRichTextRenderer.measureBlocksHeight(font, blocks, cw, expandedKeys);
+        cachedContentH = WikiRichTextRenderer.measureBlocksHeight(font, blocks, cw, scale, expandedKeys);
         drawScrollbar(g, width - MARGIN / 2, contentTop, contentBot, scrollY, cachedContentH);
 
-        renderToc(g, blocks, cx, cw, contentTop, contentBot, mx, my);
+        renderToc(g, blocks, cx, cw, contentTop, contentBot, mx, my, scale);
 
         for (RichSpan.Region r : richRegions) {
             if (!r.contains(mx, my)) continue;
@@ -458,9 +482,9 @@ public class WikiScreen extends Screen {
     }
 
     private void renderToc(GuiGraphics g, List<RichBlock> blocks, int cx, int cw, int contentTop, int contentBot,
-                           int mx, int my) {
+                           int mx, int my, float scale) {
         List<WikiRichTextRenderer.HeadingInfo> headings =
-                WikiRichTextRenderer.computeHeadingOffsets(font, blocks, cw);
+                WikiRichTextRenderer.computeHeadingOffsets(font, blocks, cw, scale);
         List<RichSpan.Region> regions = new ArrayList<>();
         if (headings.size() < 2) {
             tocRegions = regions;

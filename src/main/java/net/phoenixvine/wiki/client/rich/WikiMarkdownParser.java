@@ -16,6 +16,7 @@ public final class WikiMarkdownParser {
     private WikiMarkdownParser() {}
 
     private static final Pattern HEADING = Pattern.compile("^(#{1,6})\\s+(.*)$");
+    private static final Pattern SCALE_DIRECTIVE = Pattern.compile("^\\{scale:(\\d+(?:\\.\\d+)?)}$");
     private static final Pattern UNORDERED = Pattern.compile("^(\\s*)[-*+]\\s+(.*)$");
     private static final Pattern CHECKBOX = Pattern.compile("^\\[([ xX])]\\s+(.*)$");
     private static final Pattern ORDERED = Pattern.compile("^(\\d+)\\.\\s+(.*)$");
@@ -49,7 +50,55 @@ public final class WikiMarkdownParser {
             }
         }
 
-        return parseLines(filtered.toArray(String[]::new), footnotes);
+        return groupHeadingsIntoSections(parseLines(filtered.toArray(String[]::new), footnotes));
+    }
+
+    /**
+     * Wraps each heading (any level) and everything under it, up to the next heading of the
+     * same-or-shallower level, into a RichBlock.CollapsibleSection - lets a page's whole outline be
+     * collapsed section-by-section by clicking its headings, on top of the existing explicit
+     * :::spoiler::: block syntax. Recurses into callout/details children too, so a heading nested
+     * inside one of those also becomes its own collapsible section. Applied once, after the raw line
+     * parse, rather than during parseLines() itself, so container recursion there doesn't need to
+     * know about it.
+     */
+    private static List<RichBlock> groupHeadingsIntoSections(List<RichBlock> blocks) {
+        List<RichBlock> out = new ArrayList<>();
+        int i = 0;
+        while (i < blocks.size()) {
+            RichBlock b = blocks.get(i);
+            if (b instanceof RichBlock.Heading h) {
+                int j = i + 1;
+                while (j < blocks.size()) {
+                    RichBlock next = blocks.get(j);
+                    if (next instanceof RichBlock.Heading nh && nh.level() <= h.level()) break;
+                    j++;
+                }
+                List<RichBlock> children =
+                        groupHeadingsIntoSections(new ArrayList<>(blocks.subList(i + 1, j)));
+                String key = plainTextOf(h.spans()) + "#" + i;
+                out.add(new RichBlock.CollapsibleSection(h.level(), h.spans(), key, children));
+                i = j;
+            } else if (b instanceof RichBlock.Callout c) {
+                out.add(new RichBlock.Callout(c.type(), c.title(), groupHeadingsIntoSections(c.children())));
+                i++;
+            } else if (b instanceof RichBlock.Details d) {
+                out.add(new RichBlock.Details(d.expandKey(), d.title(), groupHeadingsIntoSections(d.children())));
+                i++;
+            } else {
+                out.add(b);
+                i++;
+            }
+        }
+        return out;
+    }
+
+    private static String plainTextOf(List<RichSpan> spans) {
+        StringBuilder sb = new StringBuilder();
+        for (RichSpan s : spans) {
+            if (s instanceof RichSpan.Text t) sb.append(t.text());
+        }
+        return sb.toString();
     }
 
     private static List<RichBlock> parseLines(String[] lines, Map<String, String> footnotes) {
@@ -64,6 +113,16 @@ public final class WikiMarkdownParser {
             if (trimmed.isEmpty()) {
                 if (!lastWasBlank) blocks.add(new RichBlock.Blank());
                 lastWasBlank = true;
+                i++;
+                continue;
+            }
+
+            Matcher sd = SCALE_DIRECTIVE.matcher(trimmed);
+            if (sd.matches()) {
+                try {
+                    blocks.add(new RichBlock.ScaleDirective(Float.parseFloat(sd.group(1))));
+                } catch (NumberFormatException ignored) {}
+                lastWasBlank = false;
                 i++;
                 continue;
             }
@@ -246,6 +305,7 @@ public final class WikiMarkdownParser {
         StringBuilder buf = new StringBuilder();
         Style currentStyle = Style.EMPTY;
         int currentBackground = 0;
+        float currentScale = 1f;
 
         while (i < len) {
             char c = input.charAt(i);
@@ -255,16 +315,25 @@ public final class WikiMarkdownParser {
                 if (end > i) {
                     String token = input.substring(i + 1, end);
                     if (token.startsWith("#") && token.length() == 7 && isHex6(token, 1)) {
-                        flush(buf, currentStyle, currentBackground, out);
+                        flush(buf, currentStyle, currentBackground, currentScale, out);
                         currentStyle = currentStyle.withColor(
                                 TextColor.fromRgb((int) Long.parseLong(token.substring(1), 16)));
                         i = end + 1;
                         continue;
                     } else if (token.equalsIgnoreCase("reset")) {
-                        flush(buf, currentStyle, currentBackground, out);
+                        flush(buf, currentStyle, currentBackground, currentScale, out);
                         currentStyle = Style.EMPTY;
+                        currentScale = 1f;
                         i = end + 1;
                         continue;
+                    } else if (token.toLowerCase().startsWith("scale:")) {
+                        try {
+                            float parsed = Float.parseFloat(token.substring(6));
+                            flush(buf, currentStyle, currentBackground, currentScale, out);
+                            currentScale = parsed;
+                            i = end + 1;
+                            continue;
+                        } catch (NumberFormatException ignored) {}
                     }
                 }
             }
@@ -274,7 +343,7 @@ public final class WikiMarkdownParser {
                 if (end > i) {
                     String id = input.substring(i + 2, end);
                     String def = footnotes.get(id);
-                    flush(buf, currentStyle, currentBackground, out);
+                    flush(buf, currentStyle, currentBackground, currentScale, out);
                     if (def != null) {
                         out.add(new RichSpan.Tip("[" + id + "]",
                                 currentStyle.withColor(TextColor.fromRgb(0xFFAAFFAA)), def));
@@ -295,20 +364,20 @@ public final class WikiMarkdownParser {
                         String target = input.substring(labelEnd + 2, targetEnd);
 
                         if (label.startsWith("img:")) {
-                            flush(buf, currentStyle, currentBackground, out);
+                            flush(buf, currentStyle, currentBackground, currentScale, out);
                             addImage(out, label.substring(4));
                             i = targetEnd + 1;
                             continue;
                         }
                         if (target.startsWith("http://") || target.startsWith("https://") ||
                                 target.startsWith("wiki:")) {
-                            flush(buf, currentStyle, currentBackground, out);
+                            flush(buf, currentStyle, currentBackground, currentScale, out);
                             out.add(new RichSpan.Link(label, currentStyle, target));
                             i = targetEnd + 1;
                             continue;
                         }
                         if (target.startsWith("tip:")) {
-                            flush(buf, currentStyle, currentBackground, out);
+                            flush(buf, currentStyle, currentBackground, currentScale, out);
                             out.add(new RichSpan.Tip(label, currentStyle, target.substring(4)));
                             i = targetEnd + 1;
                             continue;
@@ -320,13 +389,13 @@ public final class WikiMarkdownParser {
                 if (bracketEnd > i) {
                     String inner = input.substring(i + 1, bracketEnd);
                     if (inner.startsWith("img:")) {
-                        flush(buf, currentStyle, currentBackground, out);
+                        flush(buf, currentStyle, currentBackground, currentScale, out);
                         addImage(out, inner.substring(4));
                         i = bracketEnd + 1;
                         continue;
                     }
                     if (inner.startsWith("item:")) {
-                        flush(buf, currentStyle, currentBackground, out);
+                        flush(buf, currentStyle, currentBackground, currentScale, out);
                         String itemPart = inner.substring(5);
                         int bar = itemPart.indexOf('|');
                         String idPart = bar >= 0 ? itemPart.substring(0, bar) : itemPart;
@@ -344,10 +413,10 @@ public final class WikiMarkdownParser {
             if (c == '`') {
                 int end = input.indexOf('`', i + 1);
                 if (end > i) {
-                    flush(buf, currentStyle, currentBackground, out);
+                    flush(buf, currentStyle, currentBackground, currentScale, out);
                     String codeText = input.substring(i + 1, end);
                     out.add(new RichSpan.Text(codeText,
-                            currentStyle.withColor(TextColor.fromRgb(0xFFD37A)), CODE_BG, codeText));
+                            currentStyle.withColor(TextColor.fromRgb(0xFFD37A)), CODE_BG, codeText, currentScale));
                     i = end + 1;
                     continue;
                 }
@@ -356,37 +425,38 @@ public final class WikiMarkdownParser {
             if (input.startsWith("<kbd>", i)) {
                 int end = input.indexOf("</kbd>", i + 5);
                 if (end > i) {
-                    flush(buf, currentStyle, currentBackground, out);
+                    flush(buf, currentStyle, currentBackground, currentScale, out);
                     out.add(new RichSpan.Text(" " + input.substring(i + 5, end) + " ",
-                            currentStyle.withColor(TextColor.fromRgb(KBD_COLOR)).withBold(true), KBD_BG));
+                            currentStyle.withColor(TextColor.fromRgb(KBD_COLOR)).withBold(true), KBD_BG, null,
+                            currentScale));
                     i = end + 6;
                     continue;
                 }
             }
 
             if (c == '~' && i + 1 < len && input.charAt(i + 1) == '~') {
-                flush(buf, currentStyle, currentBackground, out);
+                flush(buf, currentStyle, currentBackground, currentScale, out);
                 currentStyle = currentStyle.withStrikethrough(!currentStyle.isStrikethrough());
                 i += 2;
                 continue;
             }
 
             if (c == '=' && i + 1 < len && input.charAt(i + 1) == '=') {
-                flush(buf, currentStyle, currentBackground, out);
+                flush(buf, currentStyle, currentBackground, currentScale, out);
                 currentBackground = currentBackground == HIGHLIGHT_BG ? 0 : HIGHLIGHT_BG;
                 i += 2;
                 continue;
             }
 
             if (c == '*' && i + 1 < len && input.charAt(i + 1) == '*') {
-                flush(buf, currentStyle, currentBackground, out);
+                flush(buf, currentStyle, currentBackground, currentScale, out);
                 currentStyle = currentStyle.withBold(!currentStyle.isBold());
                 i += 2;
                 continue;
             }
 
             if (c == '*') {
-                flush(buf, currentStyle, currentBackground, out);
+                flush(buf, currentStyle, currentBackground, currentScale, out);
                 currentStyle = currentStyle.withItalic(!currentStyle.isItalic());
                 i += 1;
                 continue;
@@ -396,7 +466,7 @@ public final class WikiMarkdownParser {
             i++;
         }
 
-        flush(buf, currentStyle, currentBackground, out);
+        flush(buf, currentStyle, currentBackground, currentScale, out);
         return out;
     }
 
@@ -437,9 +507,9 @@ public final class WikiMarkdownParser {
         } catch (Exception ignored) {}
     }
 
-    private static void flush(StringBuilder buf, Style style, int background, List<RichSpan> out) {
+    private static void flush(StringBuilder buf, Style style, int background, float scale, List<RichSpan> out) {
         if (buf.isEmpty()) return;
-        out.add(new RichSpan.Text(buf.toString(), style, background));
+        out.add(new RichSpan.Text(buf.toString(), style, background, null, scale));
         buf.setLength(0);
     }
 

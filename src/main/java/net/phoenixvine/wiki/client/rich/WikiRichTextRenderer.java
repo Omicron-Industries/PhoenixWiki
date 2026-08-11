@@ -13,6 +13,8 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class WikiRichTextRenderer {
 
@@ -29,6 +31,31 @@ public final class WikiRichTextRenderer {
     private static final int GAP_HEADING_BEFORE = 8;
     private static final int GAP_HEADING_AFTER = 2;
     private static final int GAP_BLANK = 4;
+
+    // Heading levels get an actual size bump (not just color/weight), so H1/H2/H3 read as a real
+    // visual hierarchy rather than same-size text in different colors. Bold text is scaled up too
+    // (everywhere, not just headings) since Minecraft's bold is normally just a heavier stroke at
+    // the same glyph size - stacking with a heading's own scale is intentional, headings are meant
+    // to read as both bold AND big. DEFAULT_SCALE is the base bump applied to all wiki body text
+    // (see WikiScreen, which is the only current caller opting into it) - "regular" MC text size
+    // otherwise reads small next to everything else in a full-screen doc-style layout.
+    private static final float H1_SCALE = 1.6f;
+    private static final float H2_SCALE = 1.35f;
+    private static final float H3_SCALE = 1.15f;
+    private static final float BOLD_SCALE = 1.15f;
+    public static final float DEFAULT_SCALE = 1.15f;
+
+    private static float headingScale(int level) {
+        return switch (Math.min(Math.max(level, 1), 3)) {
+            case 1 -> H1_SCALE;
+            case 2 -> H2_SCALE;
+            default -> H3_SCALE;
+        };
+    }
+
+    private static float boldScale(float baseScale, boolean bold) {
+        return bold ? baseScale * BOLD_SCALE : baseScale;
+    }
 
     public static java.util.function.UnaryOperator<ResourceLocation> imageResolver =
             java.util.function.UnaryOperator.identity();
@@ -133,23 +160,37 @@ public final class WikiRichTextRenderer {
     public record HeadingInfo(int level, String text, int y) {}
 
     public static List<HeadingInfo> computeHeadingOffsets(Font font, List<RichBlock> blocks, int maxW) {
+        return computeHeadingOffsets(font, blocks, maxW, 1.0f);
+    }
+
+    public static List<HeadingInfo> computeHeadingOffsets(Font font, List<RichBlock> blocks, int maxW, float scale) {
         List<HeadingInfo> out = new ArrayList<>();
-        int y = 0;
-        boolean first = true;
+        computeHeadingOffsetsInto(font, blocks, maxW, new int[] { 0 }, true, scale, out);
+        return out;
+    }
+
+    private static void computeHeadingOffsetsInto(Font font, List<RichBlock> blocks, int maxW, int[] y,
+                                                  boolean first, float scale, List<HeadingInfo> out) {
         for (RichBlock block : blocks) {
             if (block instanceof RichBlock.Blank) {
-                y += GAP_BLANK;
+                y[0] += GAP_BLANK;
                 first = false;
                 continue;
             }
-            if (!first) y += gapBefore(block);
+            if (!first) y[0] += gapBefore(block);
             first = false;
             if (block instanceof RichBlock.Heading h) {
-                out.add(new HeadingInfo(h.level(), plainText(h.spans()), y));
+                out.add(new HeadingInfo(h.level(), plainText(h.spans()), y[0]));
+                y[0] = measureOneBlock(font, block, maxW, y[0], scale, Set.of());
+            } else if (block instanceof RichBlock.CollapsibleSection s) {
+                out.add(new HeadingInfo(s.level(), plainText(s.headingSpans()), y[0]));
+                y[0] = measureOneBlock(font, new RichBlock.Heading(s.level(), s.headingSpans()), maxW, y[0], scale,
+                        Set.of());
+                computeHeadingOffsetsInto(font, s.children(), maxW, y, true, scale, out);
+            } else {
+                y[0] = measureOneBlock(font, block, maxW, y[0], scale, Set.of());
             }
-            y = measureOneBlock(font, block, maxW, y, 1.0f, Set.of());
         }
-        return out;
     }
 
     private static String plainText(List<RichSpan> spans) {
@@ -185,17 +226,11 @@ public final class WikiRichTextRenderer {
                                        int clipTop, int clipBot, List<RichSpan.Region> regions, float scale,
                                        int accentColor, Set<String> expandedKeys) {
         if (block instanceof RichBlock.Heading h) {
-            int headY = curY[0];
-            List<RichSpan> styled = switch (Math.min(h.level(), 3)) {
-                case 1 -> withHeadingStyle(h.spans());
-                case 2 -> withSubheadingStyle(h.spans());
-                default -> withH3Style(h.spans());
-            };
-            renderSpanList(g, font, styled, x, curY, x, maxW, clipTop, clipBot, regions, scale);
-            if (h.level() <= 1 && headY + 14 >= clipTop && headY <= clipBot) {
-                g.fill(x, headY + 13, x + maxW, headY + 14, accentColor);
-            }
-            curY[0] += GAP_HEADING_AFTER;
+            renderHeadingLike(g, font, h.level(), h.spans(), x, curY, maxW, clipTop, clipBot, regions, scale,
+                    accentColor);
+        } else if (block instanceof RichBlock.CollapsibleSection s) {
+            curY[0] = renderCollapsibleSection(g, font, s, x, curY[0], maxW, clipTop, clipBot, regions, scale,
+                    accentColor, expandedKeys);
         } else if (block instanceof RichBlock.ListItem li) {
             if (curY[0] >= clipTop && curY[0] + 8 <= clipBot) {
                 g.drawString(font, li.marker(), x, curY[0], 0xFFAAAAAA, false);
@@ -262,6 +297,54 @@ public final class WikiRichTextRenderer {
         renderBlockList(g, font, c.children(), innerX, headY + 12, innerMaxW, clipTop, clipBot, regions, scale,
                 color, expandedKeys);
         return y + boxH;
+    }
+
+    private static void renderHeadingLike(GuiGraphics g, Font font, int level, List<RichSpan> spans, int x,
+                                          int[] curY, int maxW, int clipTop, int clipBot,
+                                          List<RichSpan.Region> regions, float scale, int accentColor) {
+        int headY = curY[0];
+        int lvl = Math.min(level, 3);
+        List<RichSpan> styled = switch (lvl) {
+            case 1 -> withHeadingStyle(spans);
+            case 2 -> withSubheadingStyle(spans);
+            default -> withH3Style(spans);
+        };
+        float hScale = scale * headingScale(level);
+        renderSpanList(g, font, styled, x, curY, x, maxW, clipTop, clipBot, regions, hScale);
+        if (level <= 1) {
+            int lineH = Math.round(LINE_H * hScale);
+            int barY = headY + lineH + 3;
+            if (barY + 1 >= clipTop && headY <= clipBot) {
+                g.fill(x, barY, x + maxW, barY + 1, accentColor);
+            }
+        }
+        curY[0] += GAP_HEADING_AFTER;
+    }
+
+    private static String collapseTrackingKey(String collapseKey) {
+        return "HCOL:" + collapseKey;
+    }
+
+    private static int renderCollapsibleSection(GuiGraphics g, Font font, RichBlock.CollapsibleSection s, int x,
+                                                int y, int maxW, int clipTop, int clipBot,
+                                                List<RichSpan.Region> regions, float scale, int accentColor,
+                                                Set<String> expandedKeys) {
+        boolean collapsed = expandedKeys.contains(collapseTrackingKey(s.collapseKey()));
+        int headY = y;
+        int[] curY = { y };
+        List<RichSpan> withArrow = new ArrayList<>(s.headingSpans().size() + 1);
+        withArrow.add(new RichSpan.Text(collapsed ? "▸ " : "▾ ", Style.EMPTY));
+        withArrow.addAll(s.headingSpans());
+        renderHeadingLike(g, font, s.level(), withArrow, x, curY, maxW, clipTop, clipBot, regions, scale,
+                accentColor);
+        int lineH = Math.round(LINE_H * scale * headingScale(s.level()));
+        regions.add(new RichSpan.Region(x, headY, x + maxW, headY + lineH,
+                new RichSpan.DetailsToggle(collapseTrackingKey(s.collapseKey()))));
+        if (!collapsed) {
+            curY[0] = renderBlockList(g, font, s.children(), x, curY[0], maxW, clipTop, clipBot, regions, scale,
+                    accentColor, expandedKeys);
+        }
+        return curY[0];
     }
 
     private static int renderDetails(GuiGraphics g, Font font, RichBlock.Details d, int x, int y, int maxW,
@@ -356,7 +439,22 @@ public final class WikiRichTextRenderer {
         return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
-    private record HToken(String text, int color) {}
+    // interactive is non-null only for a [label](wiki:...)/[label](tip:...) annotation found inside
+    // a fenced code block - see highlightLine(). Everything else in a code block stays plain,
+    // syntax-highlighted, non-interactive text, same as before.
+    private record HToken(String text, int color, RichSpan interactive) {
+        HToken(String text, int color) {
+            this(text, color, null);
+        }
+    }
+
+    // Reuses the exact same [label](target) syntax as normal text - wiki:/tip:/http(s) targets -
+    // so a code sample can annotate a term with a clickable link or hover tooltip without needing a
+    // separate syntax to learn. Anything else inside the brackets/parens (a real code array index
+    // like `foo[0]`, a lambda, whatever) simply doesn't match this pattern and renders as plain code
+    // exactly like before.
+    private static final Pattern CODE_ANNOTATION =
+            Pattern.compile("\\[([^\\[\\]]+)]\\((wiki:[^()]+|tip:[^()]+|https?://[^()\\s]+)\\)");
 
     private static final Set<String> JAVA_KEYWORDS = Set.of(
             "public", "private", "protected", "class", "interface", "extends", "implements", "static", "final",
@@ -412,6 +510,25 @@ public final class WikiRichTextRenderer {
             "typescript");
 
     private static List<HToken> highlightLine(String lang, String line) {
+        List<HToken> out = new ArrayList<>();
+        Matcher m = CODE_ANNOTATION.matcher(line);
+        int last = 0;
+        while (m.find()) {
+            if (m.start() > last) out.addAll(highlightPlain(lang, line.substring(last, m.start())));
+            String label = m.group(1);
+            String target = m.group(2);
+            if (target.startsWith("tip:")) {
+                out.add(new HToken(label, TIP_COLOR, new RichSpan.Tip(label, Style.EMPTY, target.substring(4))));
+            } else {
+                out.add(new HToken(label, LINK_COLOR, new RichSpan.Link(label, Style.EMPTY, target)));
+            }
+            last = m.end();
+        }
+        if (last < line.length()) out.addAll(highlightPlain(lang, line.substring(last)));
+        return out;
+    }
+
+    private static List<HToken> highlightPlain(String lang, String line) {
         List<HToken> out = new ArrayList<>();
         if (lang == null || !HIGHLIGHT_LANGS.contains(lang.toLowerCase())) {
             out.add(new HToken(line, 0xFFE0E0E0));
@@ -496,12 +613,33 @@ public final class WikiRichTextRenderer {
             g.drawString(font, "§7⎘", x + maxW - btnW - 2 + 4, y + 3, 0xFFFFFFFF, false);
             for (int li = 0; li < visualLines.size(); li++) {
                 int ly = y + 3 + li * lineH;
-                if (ly >= clipTop && ly + 8 <= clipBot) {
-                    int cx = x + 4;
-                    for (HToken tok : visualLines.get(li)) {
+                int cx = x + 4;
+                for (HToken tok : visualLines.get(li)) {
+                    int tokW = font.width(tok.text());
+                    if (ly >= clipTop && ly + 8 <= clipBot) {
                         g.drawString(font, tok.text(), cx, ly, tok.color(), false);
-                        cx += font.width(tok.text());
+                        if (tok.interactive() != null) {
+                            g.fill(cx, ly + 9, cx + tokW, ly + 10, tok.color());
+                        }
                     }
+                    if (tok.interactive() != null) {
+                        regions.add(new RichSpan.Region(cx, ly, cx + tokW, ly + lineH, tok.interactive()));
+                    }
+                    cx += tokW;
+                }
+            }
+        } else {
+            // Still register interactive regions (and advance nothing else) when the block itself is
+            // clipped out of view this frame - keeps hit-testing consistent with what would render.
+            for (int li = 0; li < visualLines.size(); li++) {
+                int ly = y + 3 + li * lineH;
+                int cx = x + 4;
+                for (HToken tok : visualLines.get(li)) {
+                    int tokW = font.width(tok.text());
+                    if (tok.interactive() != null) {
+                        regions.add(new RichSpan.Region(cx, ly, cx + tokW, ly + lineH, tok.interactive()));
+                    }
+                    cx += tokW;
                 }
             }
         }
@@ -535,12 +673,12 @@ public final class WikiRichTextRenderer {
             while (!remaining.isEmpty()) {
                 int w = font.width(remaining);
                 if (curW + w <= curMaxW) {
-                    current.add(new HToken(remaining, tok.color()));
+                    current.add(new HToken(remaining, tok.color(), tok.interactive()));
                     curW += w;
                     remaining = "";
                 } else if (curW == 0) {
                     int fitLen = Math.max(1, maxFitLength(font, remaining, curMaxW));
-                    current.add(new HToken(remaining.substring(0, fitLen), tok.color()));
+                    current.add(new HToken(remaining.substring(0, fitLen), tok.color(), tok.interactive()));
                     lines.add(current);
                     current = new ArrayList<>();
                     curW = 0;
@@ -591,8 +729,19 @@ public final class WikiRichTextRenderer {
                 case 2 -> withSubheadingStyle(h.spans());
                 default -> withH3Style(h.spans());
             };
-            y = measureSpanListFrom(font, styled, maxW, y, scale);
+            y = measureSpanListFrom(font, styled, maxW, y, scale * headingScale(h.level()));
             y += GAP_HEADING_AFTER;
+        } else if (block instanceof RichBlock.CollapsibleSection s) {
+            List<RichSpan> styled = switch (Math.min(s.level(), 3)) {
+                case 1 -> withHeadingStyle(s.headingSpans());
+                case 2 -> withSubheadingStyle(s.headingSpans());
+                default -> withH3Style(s.headingSpans());
+            };
+            y = measureSpanListFrom(font, styled, maxW, y, scale * headingScale(s.level()));
+            y += GAP_HEADING_AFTER;
+            if (!expandedKeys.contains(collapseTrackingKey(s.collapseKey()))) {
+                y = measureBlockList(font, s.children(), maxW, y, scale, expandedKeys);
+            }
         } else if (block instanceof RichBlock.ListItem li) {
             y = measureSpanListFrom(font, li.spans(), maxW - li.indent(), y, scale);
         } else if (block instanceof RichBlock.Checklist cl) {
@@ -629,8 +778,11 @@ public final class WikiRichTextRenderer {
 
     private static int gapBefore(RichBlock block) {
         if (block instanceof RichBlock.Heading h) return h.level() <= 2 ? GAP_HEADING_BEFORE : GAP_HEADING_BEFORE - 3;
+        if (block instanceof RichBlock.CollapsibleSection s)
+            return s.level() <= 2 ? GAP_HEADING_BEFORE : GAP_HEADING_BEFORE - 3;
         if (block instanceof RichBlock.ListItem) return GAP_LIST_ITEM;
         if (block instanceof RichBlock.Rule) return 0;
+        if (block instanceof RichBlock.ScaleDirective) return 0;
         return GAP_PARAGRAPH;
     }
 
@@ -639,7 +791,8 @@ public final class WikiRichTextRenderer {
         for (RichSpan s : spans) {
             if (s instanceof RichSpan.Text t) {
                 out.add(new RichSpan.Text(t.text(), t.style().withBold(true).withColor(
-                        net.minecraft.network.chat.TextColor.fromRgb(HEADING_COLOR & 0xFFFFFF)), t.background()));
+                        net.minecraft.network.chat.TextColor.fromRgb(HEADING_COLOR & 0xFFFFFF)), t.background(),
+                        t.copyText(), t.scale()));
             } else {
                 out.add(s);
             }
@@ -652,7 +805,8 @@ public final class WikiRichTextRenderer {
         for (RichSpan s : spans) {
             if (s instanceof RichSpan.Text t) {
                 out.add(new RichSpan.Text(t.text(), t.style().withBold(true).withColor(
-                        net.minecraft.network.chat.TextColor.fromRgb(SUBHEADING_COLOR & 0xFFFFFF)), t.background()));
+                        net.minecraft.network.chat.TextColor.fromRgb(SUBHEADING_COLOR & 0xFFFFFF)), t.background(),
+                        t.copyText(), t.scale()));
             } else {
                 out.add(s);
             }
@@ -665,7 +819,8 @@ public final class WikiRichTextRenderer {
         for (RichSpan s : spans) {
             if (s instanceof RichSpan.Text t) {
                 out.add(new RichSpan.Text(t.text(), t.style().withStrikethrough(true)
-                        .withColor(net.minecraft.network.chat.TextColor.fromRgb(0xFF888888)), t.background()));
+                        .withColor(net.minecraft.network.chat.TextColor.fromRgb(0xFF888888)), t.background(),
+                        t.copyText(), t.scale()));
             } else {
                 out.add(s);
             }
@@ -678,7 +833,8 @@ public final class WikiRichTextRenderer {
         for (RichSpan s : spans) {
             if (s instanceof RichSpan.Text t) {
                 out.add(new RichSpan.Text(t.text(), t.style().withBold(false).withColor(
-                        net.minecraft.network.chat.TextColor.fromRgb(H3_COLOR & 0xFFFFFF)), t.background()));
+                        net.minecraft.network.chat.TextColor.fromRgb(H3_COLOR & 0xFFFFFF)), t.background(),
+                        t.copyText(), t.scale()));
             } else {
                 out.add(s);
             }
@@ -760,7 +916,7 @@ public final class WikiRichTextRenderer {
                 }
                 curX += 18;
             } else if (span instanceof RichSpan.Text t) {
-                int[] p = measureWords(font, t.text(), t.style(), curX, curY, 0, maxW, scale);
+                int[] p = measureWords(font, t.text(), t.style(), curX, curY, 0, maxW, scale * t.scale());
                 curX = p[0];
                 curY = p[1];
             } else if (span instanceof RichSpan.Link l) {
@@ -784,6 +940,12 @@ public final class WikiRichTextRenderer {
                                      int clipTop, int clipBot,
                                      List<RichSpan.Region> regions, RichSpan source, float scale) {
         if (text == null || text.isEmpty()) return new int[] { curX, curY };
+
+        // A per-span {scale:1.4}...{reset} multiplier (see WikiMarkdownParser.parseInline) stacks
+        // on top of whatever ambient scale (page default, heading level) this call already got -
+        // folded into the local scale up front so every boldScale()/lineH calc below picks it up
+        // automatically, same as if the caller had passed a bigger scale in the first place.
+        if (source instanceof RichSpan.Text t) scale *= t.scale();
 
         int lineH = Math.round(LINE_H * scale);
         String inlineCodeText = source instanceof RichSpan.Text t ? t.copyText() : null;
@@ -809,18 +971,19 @@ public final class WikiRichTextRenderer {
             for (String token : tokens) {
                 if (token.isBlank() && curX == originX) continue;
                 Style newStyle = applyLegacyCodes(running, token);
-                int tokW = Math.round(font.width(Component.literal(token).withStyle(newStyle)) * scale);
+                int tokW = Math.round(font.width(Component.literal(token).withStyle(newStyle)) *
+                        boldScale(scale, newStyle.isBold()));
                 if (curX + tokW > originX + maxW && curX > originX) {
-                    flushRun(g, font, run, runStyle, fallbackColor, runStartX, curY, clipTop, clipBot, scale,
-                            background);
+                    flushRun(g, font, run, runStyle, fallbackColor, runStartX, curY, clipTop, clipBot,
+                            boldScale(scale, runStyle.isBold()), background);
                     curX = originX;
                     curY += lineH;
                     runStartX = curX;
                 }
 
                 if (!newStyle.equals(runStyle) && !run.isEmpty()) {
-                    flushRun(g, font, run, runStyle, fallbackColor, runStartX, curY, clipTop, clipBot, scale,
-                            background);
+                    flushRun(g, font, run, runStyle, fallbackColor, runStartX, curY, clipTop, clipBot,
+                            boldScale(scale, runStyle.isBold()), background);
                     runStartX = curX;
                 }
                 running = newStyle;
@@ -832,7 +995,8 @@ public final class WikiRichTextRenderer {
                 }
                 curX += tokW;
             }
-            flushRun(g, font, run, runStyle, fallbackColor, runStartX, curY, clipTop, clipBot, scale, background);
+            flushRun(g, font, run, runStyle, fallbackColor, runStartX, curY, clipTop, clipBot,
+                    boldScale(scale, runStyle.isBold()), background);
         }
         return new int[] { curX, curY };
     }
@@ -874,7 +1038,8 @@ public final class WikiRichTextRenderer {
             for (String token : tokenize(lines[li])) {
                 if (token.isBlank() && curX == originX) continue;
                 running = applyLegacyCodes(running, token);
-                int tokW = Math.round(font.width(Component.literal(token).withStyle(running)) * scale);
+                int tokW = Math.round(font.width(Component.literal(token).withStyle(running)) *
+                        boldScale(scale, running.isBold()));
                 if (curX + tokW > originX + maxW && curX > originX) {
                     curX = originX;
                     curY += lineH;
