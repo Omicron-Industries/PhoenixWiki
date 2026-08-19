@@ -40,13 +40,6 @@ public sealed interface RichBlock {
         }
     }
 
-    /**
-     * A heading (H1-H3) plus everything under it up to the next heading of the same-or-shallower
-     * level, collapsible by clicking the heading itself - unlike {@link Details}, the heading keeps
-     * its normal heading size/color/weight rather than being replaced with a "Details" bullet
-     * header. Defaults to expanded; {@code collapseKey} is checked by the renderer with inverted
-     * semantics from Details' expandKey (present in the tracked key set = collapsed, not expanded).
-     */
     record CollapsibleSection(int level, List<RichSpan> headingSpans, String collapseKey,
                               List<RichBlock> children) implements RichBlock {
 
@@ -56,11 +49,6 @@ public sealed interface RichBlock {
         }
     }
 
-    /**
-     * A page-level {@code {scale:1.2}} directive (its own line, anywhere in the source, usually the
-     * first) - invisible in the rendered page, just tells the host screen to multiply its base text
-     * scale for this one page. See WikiMarkdownParser's SCALE_DIRECTIVE pattern.
-     */
     record ScaleDirective(float multiplier) implements RichBlock {
 
         @Override

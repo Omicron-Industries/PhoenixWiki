@@ -14,14 +14,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * A single shared color theme, deliberately stored at one config path used by every host mod that
- * embeds this jar-in-jar'd library - "pick a theme once, every Phoenixvine mod on this client uses
- * it" rather than each mod having its own independent theme choice. Ported from PhoenixChronicles'
- * original ChroniclesTheme with only two real changes: the config path is suite-wide instead of
- * mod-namespaced, and {@link #isReduceMotion()} replaces a call into Chronicles' own settings class
- * so this has zero dependency on any specific host mod.
- */
 public class PhoenixTheme {
 
     public static class ThemeColor {
@@ -148,9 +140,6 @@ public class PhoenixTheme {
         return reduceMotion;
     }
 
-    /** Any host mod's own accessibility/settings screen can call this to suppress the animated
-     * RAINBOW/MAGMA/AURORA/GALAXY theme colors - shared across the whole suite, same as the theme
-     * choice itself. */
     public static void setReduceMotion(boolean value) {
         reduceMotion = value;
     }
@@ -158,18 +147,8 @@ public class PhoenixTheme {
     private static final Set<String> BUILTINS = Set.of("DARK", "LIGHT", "CRIMSON", "OCEAN", "PHANTOM", "EMBER",
             "RAINBOW", "MAGMA");
 
-    // Deliberately NOT used for PhoenixTheme/ThemeColor - Gson 2.10 (the version Forge 1.20.1
-    // bundles) has a reflection bug where its automatic ReflectiveTypeAdapterFactory occasionally
-    // stumbles into JDK-internal fields like java.lang.ThreadLocal#threadLocalHashCode and throws
-    // JsonIOException trying to make them accessible under Java 17's module restrictions - fixed
-    // upstream in Gson 2.10.1, but we can't bump Forge's bundled version. saveAll()/loadThemes()
-    // build/read the JSON manually via the tree API (JsonObject) instead, which never invokes that
-    // reflective code path at all.
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    // Deliberately NOT namespaced under any one mod's config subfolder - this file is meant to be
-    // shared by every Phoenixvine mod that embeds this library, so picking a theme in any one of
-    // them changes it for all of them.
     private static final Path THEMES_FILE = FMLPaths.CONFIGDIR.get().resolve("phoenixsuite_theme.json");
 
     public PhoenixTheme() {}

@@ -309,12 +309,6 @@ public class WikiScreen extends Screen {
         return Map.of();
     }
 
-    /**
-     * WikiRichTextRenderer.DEFAULT_SCALE, further multiplied by a page's own {@code {scale:1.2}}
-     * directive if it has one anywhere in its source (see WikiMarkdownParser.ScaleDirective) -
-     * that's the "control in markdown" escape hatch for a page that wants to run bigger/smaller
-     * than the shared default, e.g. a page that's mostly one big diagram callout.
-     */
     private float pageScale(List<RichBlock> blocks) {
         float mult = 1.0f;
         for (RichBlock b : blocks) {

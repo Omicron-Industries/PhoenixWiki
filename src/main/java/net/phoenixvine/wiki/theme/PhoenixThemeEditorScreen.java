@@ -15,13 +15,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Stack;
 
-/**
- * Full theme editor - color fields, a live mock preview, and a theme list to switch/save/delete
- * from. Since {@link PhoenixTheme} is shared suite-wide, this screen (and every color it edits)
- * is shared too: any host mod can open it, and changes apply to every other Phoenixvine mod on
- * this client. Ported from PhoenixChronicles' ChroniclesThemeEditorScreen - only the mock preview's
- * app name and the border-drawing helper (now local, was ChroniclesUIKit.drawBorder) changed.
- */
 public class PhoenixThemeEditorScreen extends Screen {
 
     private final Screen parent;

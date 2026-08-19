@@ -108,3 +108,14 @@ tasks.register('publishToChronicles', Copy) {
     }
     into '../PhoenixChronicles/libs'
 }
+
+tasks.register('publishToGuilds', Copy) {
+    group = 'phoenix'
+    description = 'Builds this mod and copies the jar into ../Phoenix-Guilds/libs, so Guilds picks up local changes.'
+    dependsOn 'reobfJar'
+    from(layout.buildDirectory.dir('libs')) {
+        include '*.jar'
+        exclude '*-sources.jar'
+    }
+    into '../Phoenix-Guilds/libs'
+}

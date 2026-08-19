@@ -32,18 +32,11 @@ public final class WikiRichTextRenderer {
     private static final int GAP_HEADING_AFTER = 2;
     private static final int GAP_BLANK = 4;
 
-    // Heading levels get an actual size bump (not just color/weight), so H1/H2/H3 read as a real
-    // visual hierarchy rather than same-size text in different colors. Bold text is scaled up too
-    // (everywhere, not just headings) since Minecraft's bold is normally just a heavier stroke at
-    // the same glyph size - stacking with a heading's own scale is intentional, headings are meant
-    // to read as both bold AND big. DEFAULT_SCALE is the base bump applied to all wiki body text
-    // (see WikiScreen, which is the only current caller opting into it) - "regular" MC text size
-    // otherwise reads small next to everything else in a full-screen doc-style layout.
-    private static final float H1_SCALE = 1.6f;
-    private static final float H2_SCALE = 1.35f;
-    private static final float H3_SCALE = 1.15f;
+    private static final float H1_SCALE = 1.35f;
+    private static final float H2_SCALE = 1.2f;
+    private static final float H3_SCALE = 1.08f;
     private static final float BOLD_SCALE = 1.15f;
-    public static final float DEFAULT_SCALE = 1.15f;
+    public static final float DEFAULT_SCALE = 1.05f;
 
     private static float headingScale(int level) {
         return switch (Math.min(Math.max(level, 1), 3)) {
@@ -312,8 +305,8 @@ public final class WikiRichTextRenderer {
         float hScale = scale * headingScale(level);
         renderSpanList(g, font, styled, x, curY, x, maxW, clipTop, clipBot, regions, hScale);
         if (level <= 1) {
-            int lineH = Math.round(LINE_H * hScale);
-            int barY = headY + lineH + 3;
+
+            int barY = curY[0] + 3;
             if (barY + 1 >= clipTop && headY <= clipBot) {
                 g.fill(x, barY, x + maxW, barY + 1, accentColor);
             }
@@ -337,8 +330,7 @@ public final class WikiRichTextRenderer {
         withArrow.addAll(s.headingSpans());
         renderHeadingLike(g, font, s.level(), withArrow, x, curY, maxW, clipTop, clipBot, regions, scale,
                 accentColor);
-        int lineH = Math.round(LINE_H * scale * headingScale(s.level()));
-        regions.add(new RichSpan.Region(x, headY, x + maxW, headY + lineH,
+        regions.add(new RichSpan.Region(x, headY, x + maxW, curY[0],
                 new RichSpan.DetailsToggle(collapseTrackingKey(s.collapseKey()))));
         if (!collapsed) {
             curY[0] = renderBlockList(g, font, s.children(), x, curY[0], maxW, clipTop, clipBot, regions, scale,
@@ -439,20 +431,12 @@ public final class WikiRichTextRenderer {
         return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
-    // interactive is non-null only for a [label](wiki:...)/[label](tip:...) annotation found inside
-    // a fenced code block - see highlightLine(). Everything else in a code block stays plain,
-    // syntax-highlighted, non-interactive text, same as before.
     private record HToken(String text, int color, RichSpan interactive) {
         HToken(String text, int color) {
             this(text, color, null);
         }
     }
 
-    // Reuses the exact same [label](target) syntax as normal text - wiki:/tip:/http(s) targets -
-    // so a code sample can annotate a term with a clickable link or hover tooltip without needing a
-    // separate syntax to learn. Anything else inside the brackets/parens (a real code array index
-    // like `foo[0]`, a lambda, whatever) simply doesn't match this pattern and renders as plain code
-    // exactly like before.
     private static final Pattern CODE_ANNOTATION =
             Pattern.compile("\\[([^\\[\\]]+)]\\((wiki:[^()]+|tip:[^()]+|https?://[^()\\s]+)\\)");
 
@@ -629,8 +613,7 @@ public final class WikiRichTextRenderer {
                 }
             }
         } else {
-            // Still register interactive regions (and advance nothing else) when the block itself is
-            // clipped out of view this frame - keeps hit-testing consistent with what would render.
+
             for (int li = 0; li < visualLines.size(); li++) {
                 int ly = y + 3 + li * lineH;
                 int cx = x + 4;
@@ -941,10 +924,6 @@ public final class WikiRichTextRenderer {
                                      List<RichSpan.Region> regions, RichSpan source, float scale) {
         if (text == null || text.isEmpty()) return new int[] { curX, curY };
 
-        // A per-span {scale:1.4}...{reset} multiplier (see WikiMarkdownParser.parseInline) stacks
-        // on top of whatever ambient scale (page default, heading level) this call already got -
-        // folded into the local scale up front so every boldScale()/lineH calc below picks it up
-        // automatically, same as if the caller had passed a bigger scale in the first place.
         if (source instanceof RichSpan.Text t) scale *= t.scale();
 
         int lineH = Math.round(LINE_H * scale);

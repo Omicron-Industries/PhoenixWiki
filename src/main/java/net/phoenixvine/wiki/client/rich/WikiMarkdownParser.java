@@ -53,15 +53,6 @@ public final class WikiMarkdownParser {
         return groupHeadingsIntoSections(parseLines(filtered.toArray(String[]::new), footnotes));
     }
 
-    /**
-     * Wraps each heading (any level) and everything under it, up to the next heading of the
-     * same-or-shallower level, into a RichBlock.CollapsibleSection - lets a page's whole outline be
-     * collapsed section-by-section by clicking its headings, on top of the existing explicit
-     * :::spoiler::: block syntax. Recurses into callout/details children too, so a heading nested
-     * inside one of those also becomes its own collapsible section. Applied once, after the raw line
-     * parse, rather than during parseLines() itself, so container recursion there doesn't need to
-     * know about it.
-     */
     private static List<RichBlock> groupHeadingsIntoSections(List<RichBlock> blocks) {
         List<RichBlock> out = new ArrayList<>();
         int i = 0;
