@@ -128,11 +128,27 @@ public class PhoenixTheme {
         }
     }
 
-    public ThemeColor bg, panel, header, border, accent, text, textDim, textFaint, done, activeColor, locked;
+    public ThemeColor bg, panel, header, border, accent, text, textDim, textFaint, done, activeColor, locked, ally;
 
     public static final Map<String, PhoenixTheme> REGISTRY = new LinkedHashMap<>();
     private static PhoenixTheme active = null;
     private static String activeName = "DARK";
+
+    private static final java.util.List<Runnable> CHANGE_LISTENERS = new java.util.ArrayList<>();
+
+    public static void addChangeListener(Runnable listener) {
+        CHANGE_LISTENERS.add(listener);
+    }
+
+    private static void fireChangeListeners() {
+        for (Runnable r : CHANGE_LISTENERS) {
+            try {
+                r.run();
+            } catch (Exception e) {
+                net.phoenixvine.wiki.PhoenixWiki.LOGGER.error("Suite theme change listener threw", e);
+            }
+        }
+    }
 
     private static boolean reduceMotion = false;
 
@@ -144,8 +160,8 @@ public class PhoenixTheme {
         reduceMotion = value;
     }
 
-    private static final Set<String> BUILTINS = Set.of("DARK", "LIGHT", "CRIMSON", "OCEAN", "PHANTOM", "EMBER",
-            "RAINBOW", "MAGMA");
+    private static final Set<String> BUILTINS = Set.of("DARK", "LIGHT", "PASTEL", "CRIMSON", "OCEAN", "PHANTOM",
+            "EMBER", "RAINBOW", "PASTEL_RAINBOW", "MAGMA");
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -156,6 +172,12 @@ public class PhoenixTheme {
     public PhoenixTheme(String bg, String panel, String header, String border, String accent,
                         String text, String textDim, String textFaint, String done, String activeCol,
                         String locked) {
+        this(bg, panel, header, border, accent, text, textDim, textFaint, done, activeCol, locked, accent);
+    }
+
+    public PhoenixTheme(String bg, String panel, String header, String border, String accent,
+                        String text, String textDim, String textFaint, String done, String activeCol,
+                        String locked, String ally) {
         this.bg = new ThemeColor(bg);
         this.panel = new ThemeColor(panel);
         this.header = new ThemeColor(header);
@@ -167,6 +189,7 @@ public class PhoenixTheme {
         this.done = new ThemeColor(done);
         this.activeColor = new ThemeColor(activeCol);
         this.locked = new ThemeColor(locked);
+        this.ally = new ThemeColor(ally);
         assignAnimOffsets();
     }
 
@@ -182,12 +205,13 @@ public class PhoenixTheme {
         if (done != null) done.setAnimOffset(4000);
         if (activeColor != null) activeColor.setAnimOffset(4500);
         if (locked != null) locked.setAnimOffset(5000);
+        if (ally != null) ally.setAnimOffset(5500);
     }
 
     public PhoenixTheme copy() {
         return new PhoenixTheme(
                 bg.hex, panel.hex, header.hex, border.hex, accent.hex,
-                text.hex, textDim.hex, textFaint.hex, done.hex, activeColor.hex, locked.hex);
+                text.hex, textDim.hex, textFaint.hex, done.hex, activeColor.hex, locked.hex, ally.hex);
     }
 
     public static PhoenixTheme current() {
@@ -212,22 +236,39 @@ public class PhoenixTheme {
             activeName = name;
 
             saveAll();
+            fireChangeListeners();
         }
     }
 
     public static void saveCustomTheme(String name, PhoenixTheme theme) {
+        if (isBuiltin(name)) return;
         REGISTRY.put(name, theme);
         saveAll();
+        fireChangeListeners();
+    }
+
+    public static String createNewTheme(String baseName, PhoenixTheme source) {
+        if (REGISTRY.isEmpty()) loadThemes();
+        String candidate = baseName;
+        int n = 2;
+        while (REGISTRY.containsKey(candidate) || isBuiltin(candidate)) {
+            candidate = baseName + " " + n;
+            n++;
+        }
+        saveCustomTheme(candidate, source.copy());
+        setCurrent(candidate);
+        return candidate;
     }
 
     public static boolean deleteCustom(String name) {
         if (isBuiltin(name)) return false;
-        REGISTRY.remove(name);
+        if (REGISTRY.remove(name) == null) return false;
         if (name.equals(activeName)) {
             activeName = "DARK";
             active = REGISTRY.get("DARK");
         }
         saveAll();
+        fireChangeListeners();
         return true;
     }
 
@@ -244,14 +285,18 @@ public class PhoenixTheme {
         o.addProperty("done", t.done.hex);
         o.addProperty("activeColor", t.activeColor.hex);
         o.addProperty("locked", t.locked.hex);
+        o.addProperty("ally", t.ally.hex);
         return o;
     }
 
     private static PhoenixTheme themeFromJson(JsonObject o) {
+        String accent = field(o, "accent");
         return new PhoenixTheme(
-                field(o, "bg"), field(o, "panel"), field(o, "header"), field(o, "border"), field(o, "accent"),
+                field(o, "bg"), field(o, "panel"), field(o, "header"), field(o, "border"), accent,
                 field(o, "text"), field(o, "textDim"), field(o, "textFaint"), field(o, "done"),
-                field(o, "activeColor"), field(o, "locked"));
+                field(o, "activeColor"), field(o, "locked"),
+
+                o.has("ally") ? field(o, "ally") : accent);
     }
 
     private static String field(JsonObject o, String key) {
@@ -279,35 +324,43 @@ public class PhoenixTheme {
 
         REGISTRY.put("DARK", new PhoenixTheme(
                 "FF0B0B0F", "FF14141A", "FF0C0C10", "FF353548", "FF00AA55",
-                "FFD8D8E4", "FF7A7A8A", "FF404050", "FF44CC88", "FFFFBB33", "FF606070"));
+                "FFD8D8E4", "FF7A7A8A", "FF404050", "FF44CC88", "FFFFBB33", "FF606070", "FF4499FF"));
 
         REGISTRY.put("LIGHT", new PhoenixTheme(
                 "FFF0F0F4", "FFE4E4EC", "FFD8D8E0", "FFA0A0B0", "FF0088CC",
-                "FF1A1A2A", "FF555565", "FF888898", "FF22AA55", "FFCC6600", "FF808090"));
+                "FF1A1A2A", "FF555565", "FF888898", "FF22AA55", "FFCC6600", "FF808090", "FF3377CC"));
+
+        REGISTRY.put("PASTEL", new PhoenixTheme(
+                "FFFCEEF6", "FFF6E0EF", "FFF0D4E8", "FFE0B8D4", "FFCC66AA",
+                "FF4A3550", "FF8A7090", "FFB8A0C0", "FF66BB88", "FFEEAA55", "FFB0A0B8", "FF77AADD"));
 
         REGISTRY.put("CRIMSON", new PhoenixTheme(
                 "FF0F0808", "FF1A0C0C", "FF0D0606", "FF3A1818", "FFCC2233",
-                "FFE4D0D0", "FF8A6A6A", "FF503838", "FF44CC66", "FFFFAA33", "FF705555"));
+                "FFE4D0D0", "FF8A6A6A", "FF503838", "FF44CC66", "FFFFAA33", "FF705555", "FF4488CC"));
 
         REGISTRY.put("OCEAN", new PhoenixTheme(
                 "FF080C12", "FF0E1520", "FF080C14", "FF1E2A3C", "FF0099CC",
-                "FFCCE0F0", "FF6080A0", "FF304060", "FF33CC88", "FFFFBB33", "FF506888"));
+                "FFCCE0F0", "FF6080A0", "FF304060", "FF33CC88", "FFFFBB33", "FF506888", "FF33AAEE"));
 
         REGISTRY.put("PHANTOM", new PhoenixTheme(
                 "FF0A080F", "FF130E1C", "FF0A0810", "FF2E2040", "FF8833CC",
-                "FFD8CCF0", "FF7060A0", "FF3C2C5C", "FF44BB88", "FFFFAA44", "FF604880"));
+                "FFD8CCF0", "FF7060A0", "FF3C2C5C", "FF44BB88", "FFFFAA44", "FF604880", "FF7799EE"));
 
         REGISTRY.put("EMBER", new PhoenixTheme(
                 "FF100A06", "FF1C120A", "FF100A04", "FF382210", "FFCC6600",
-                "FFF0E0CC", "FFA0785A", "FF604830", "FF44CC77", "FFFFCC22", "FF806040"));
+                "FFF0E0CC", "FFA0785A", "FF604830", "FF44CC77", "FFFFCC22", "FF806040", "FF4499CC"));
 
         REGISTRY.put("RAINBOW", new PhoenixTheme(
                 "FF09090C", "FF111116", "FF0A0A0E", "RAINBOW", "RAINBOW",
-                "FFEEEEEE", "FF888888", "FF505050", "FF44CC88", "RAINBOW", "FF606070"));
+                "FFEEEEEE", "FF888888", "FF505050", "FF44CC88", "RAINBOW", "FF606070", "FF4499FF"));
+
+        REGISTRY.put("PASTEL_RAINBOW", new PhoenixTheme(
+                "FFFAF0F8", "FFF6E8F2", "FFF2DCEC", "PASTEL_RAINBOW", "PASTEL_RAINBOW",
+                "FF4A3550", "FF8A7090", "FFB8A0C0", "FF66BB88", "PASTEL_RAINBOW", "FFB0A0B8", "FF77AADD"));
 
         REGISTRY.put("MAGMA", new PhoenixTheme(
                 "FF120806", "FF1C0E0A", "FF100604", "MAGMA", "MAGMA",
-                "FFF0E0D0", "FFA07860", "FF604838", "FF44CC77", "MAGMA", "FF705040"));
+                "FFF0E0D0", "FFA07860", "FF604838", "FF44CC77", "MAGMA", "FF705040", "FF4499CC"));
 
         String loadedActive = "DARK";
         try {

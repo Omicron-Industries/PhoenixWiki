@@ -39,10 +39,11 @@ public final class SuiteHudBar {
     private static final int BTN_SIZE = 20;
     private static final int GAP = 2;
     private static final int MARGIN = 4;
-    private static final int GRID_COLUMNS = 3;
+    private static final int GRID_ROWS = 3;
 
     private record Entry(String modId, int priority, ResourceLocation icon, Supplier<Component> tooltip,
-                         IntSupplier slotCount, Runnable onClick) {}
+                         IntSupplier slotCount, Runnable onClick, int texWidth, int texHeight,
+                         boolean tintToTheme) {}
 
     private static final List<Entry> ENTRIES = new ArrayList<>();
 
@@ -53,8 +54,14 @@ public final class SuiteHudBar {
 
     public static void register(String modId, int priority, ResourceLocation icon, Supplier<Component> tooltip,
                                 IntSupplier slotCount, Runnable onClick) {
+        register(modId, priority, icon, tooltip, slotCount, onClick, 16, 16, false);
+    }
+
+    public static void register(String modId, int priority, ResourceLocation icon, Supplier<Component> tooltip,
+                                IntSupplier slotCount, Runnable onClick, int texWidth, int texHeight,
+                                boolean tintToTheme) {
         ENTRIES.removeIf(e -> e.modId().equals(modId));
-        ENTRIES.add(new Entry(modId, priority, icon, tooltip, slotCount, onClick));
+        ENTRIES.add(new Entry(modId, priority, icon, tooltip, slotCount, onClick, texWidth, texHeight, tintToTheme));
         ENTRIES.sort(Comparator.comparingInt(Entry::priority));
     }
 
@@ -69,12 +76,12 @@ public final class SuiteHudBar {
     }
 
     public static int barWidth() {
-        int cols = Math.min(GRID_COLUMNS, Math.max(1, totalSlotCount()));
+        int cols = Math.max(1, (int) Math.ceil(totalSlotCount() / (double) GRID_ROWS));
         return MARGIN * 2 + cols * BTN_SIZE + (cols - 1) * GAP;
     }
 
     public static int barHeight() {
-        int rows = Math.max(1, (int) Math.ceil(totalSlotCount() / (double) GRID_COLUMNS));
+        int rows = Math.min(GRID_ROWS, Math.max(1, totalSlotCount()));
         return MARGIN * 2 + rows * BTN_SIZE + (rows - 1) * GAP;
     }
 
@@ -93,11 +100,11 @@ public final class SuiteHudBar {
     }
 
     private static int slotX(int slotIndex) {
-        return MARGIN + (slotIndex % GRID_COLUMNS) * (BTN_SIZE + GAP);
+        return MARGIN + (slotIndex / GRID_ROWS) * (BTN_SIZE + GAP);
     }
 
     private static int slotY(int slotIndex) {
-        return MARGIN + (slotIndex / GRID_COLUMNS) * (BTN_SIZE + GAP);
+        return MARGIN + (slotIndex % GRID_ROWS) * (BTN_SIZE + GAP);
     }
 
     private static Entry entryAt(double mx, double my) {
@@ -132,13 +139,30 @@ public final class SuiteHudBar {
                 g.fill(x, y, x + 1, y + BTN_SIZE, border);
                 g.fill(x + BTN_SIZE - 1, y, x + BTN_SIZE, y + BTN_SIZE, border);
                 g.fill(x, y + BTN_SIZE - 1, x + BTN_SIZE, y + BTN_SIZE, border);
-                g.blit(e.icon(), x + 2, y + 2, 0, 0, 16, 16, 16, 128);
+                drawIcon(g, e, x, y, t);
                 idx++;
             }
         }
 
         if (hoveredEntry != null) {
             g.renderTooltip(mc.font, hoveredEntry.tooltip().get(), (int) hoverMx, (int) hoverMy);
+        }
+    }
+
+    private static void drawIcon(GuiGraphics g, Entry e, int x, int y, PhoenixTheme t) {
+        if (!e.tintToTheme()) {
+            g.blit(e.icon(), x + 2, y + 2, 0, 0, 16, 16, e.texWidth(), e.texHeight());
+            return;
+        }
+
+        int color = t.textDim.getColor();
+        float a = ((color >>> 24) & 0xFF) / 255f;
+        com.mojang.blaze3d.systems.RenderSystem.setShaderColor(((color >> 16) & 0xFF) / 255f,
+                ((color >> 8) & 0xFF) / 255f, (color & 0xFF) / 255f, a > 0f ? a : 1f);
+        try {
+            g.blit(e.icon(), x + 2, y + 2, 0, 0, 16, 16, e.texWidth(), e.texHeight());
+        } finally {
+            com.mojang.blaze3d.systems.RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         }
     }
 

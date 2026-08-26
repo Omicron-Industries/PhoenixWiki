@@ -28,11 +28,9 @@ public class PhoenixThemeEditorScreen extends Screen {
 
     private int listRowsStartY = 0;
 
-    private final List<String> pendingDeletions = new ArrayList<>();
-
     private record Snap(String bg, String panel, String header, String border, String accent,
                         String text, String dim, String faint, String done, String active,
-                        String locked, String name) {}
+                        String locked, String ally, String name) {}
 
     private final Stack<Snap> undoStack = new Stack<>();
     private Snap savedSnap;
@@ -42,9 +40,24 @@ public class PhoenixThemeEditorScreen extends Screen {
     private boolean confirmActive = false;
     private String pendingAction = null;
 
+    private FieldEntry openPickerField = null;
+    private float pickerHue = 0f, pickerSat = 1f, pickerVal = 1f;
+    private int pickerX, pickerY;
+    private boolean draggingSV = false, draggingHue = false;
+    private static final int SV_SIZE = 100;
+    private static final int HUE_W = 14;
+    private static final int HUE_GAP = 6;
+    private static final int PICKER_PAD = 8;
+
     private int C_BG, C_PANEL, C_HEADER, C_BORDER, C_ACCENT, C_TEXT, C_DIM, C_FAINT;
 
     private static final int SIDEBAR_MIN = 185;
+
+    private static final int MIN_CONTENT_W = SIDEBAR_MIN + 260;
+    private static final int MIN_CONTENT_H = 420;
+
+    private float uiScale = 1f;
+    private int vw, vh;
 
     private long animTick = 0L;
 
@@ -69,6 +82,12 @@ public class PhoenixThemeEditorScreen extends Screen {
         fields.clear();
         sections.clear();
 
+        uiScale = (width < MIN_CONTENT_W || height < MIN_CONTENT_H) ?
+                Math.min((float) width / MIN_CONTENT_W, (float) height / MIN_CONTENT_H) : 1f;
+        uiScale = Math.max(0.1f, uiScale);
+        vw = Math.round(width / uiScale);
+        vh = Math.round(height / uiScale);
+
         PhoenixTheme t = PhoenixTheme.current();
         String curName = PhoenixTheme.getActiveName();
 
@@ -78,16 +97,16 @@ public class PhoenixThemeEditorScreen extends Screen {
             lastTrackedName = curName;
             savedSnap = makeSnap(t, curName);
             undoStack.clear();
-            pendingDeletions.clear();
             confirmActive = false;
             pendingAction = null;
         }
 
         int sbW = sidebarW();
-        int sbX = width - sbW + 6;
-        int boxW = sbW - 82;
+        int sbX = vw - sbW + 6;
+
+        int boxW = sbW - 97;
         int y = 38;
-        int rh = height > 360 ? 20 : 17;
+        int rh = vh > 360 ? 20 : 17;
 
         sections.add(new SectionLabel("■ Base Layers", sbX, y));
         y += 12;
@@ -118,18 +137,32 @@ public class PhoenixThemeEditorScreen extends Screen {
         addField("Active", t.activeColor, sbX, y, boxW);
         y += rh;
         addField("Locked", t.locked, sbX, y, boxW);
+        y += rh;
+        addField("Ally", t.ally, sbX, y, boxW);
         y += rh + 6;
 
-        int ctrlY = Math.max(y + 4, height - 70);
-        nameInput = new EditBox(font, width - sbW + 10, ctrlY, sbW - 20, 16, Component.literal("Theme name"));
+        int ctrlY = Math.max(y + 4, vh - 70);
+        nameInput = new EditBox(font, vw - sbW + 10, ctrlY, sbW - 20, 16, Component.literal("Theme name"));
         nameInput.setValue(curName);
         nameInput.setMaxLength(32);
         nameInput.setResponder(s -> confirmActive = false);
         addWidget(nameInput);
 
+        int halfW = (sbW - 20 - 4) / 2;
         addRenderableWidget(Button
                 .builder(Component.literal("§aSave"), b -> save())
-                .bounds(width - sbW + 10, ctrlY + 20, sbW - 20, 18).build());
+                .bounds(vw - sbW + 10, ctrlY + 20, halfW, 18)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(
+                        "Saves the current colors under the name above - overwrites that theme if it\n" +
+                                "already exists (only ever a custom one, never a built-in).")))
+                .build());
+        addRenderableWidget(Button
+                .builder(Component.literal("§b+ New"), b -> newTheme())
+                .bounds(vw - sbW + 10 + halfW + 4, ctrlY + 20, sbW - 20 - halfW - 4, 18)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(
+                        "Starts a brand-new custom theme (a copy of the current colors) under its own\n" +
+                                "name, so editing it never touches whatever theme you started from.")))
+                .build());
 
         addRenderableWidget(Button
                 .builder(Component.literal("§7Exit"), b -> {
@@ -143,7 +176,56 @@ public class PhoenixThemeEditorScreen extends Screen {
                     }
                     onClose();
                 })
-                .bounds(width - sbW + 10, ctrlY + 42, sbW - 20, 18).build());
+                .bounds(vw - sbW + 10, ctrlY + 42, sbW - 20, 18).build());
+    }
+
+    private void newTheme() {
+        PhoenixTheme.createNewTheme("CUSTOM", PhoenixTheme.current());
+        confirmActive = false;
+        pendingAction = null;
+        lastTrackedName = null;
+        init();
+    }
+
+    private void openColorPicker(FieldEntry f) {
+        openPickerField = f;
+        int argb = f.target().getColor();
+        float[] hsv = java.awt.Color.RGBtoHSB((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, null);
+        pickerHue = hsv[0];
+        pickerSat = hsv[1];
+        pickerVal = hsv[2];
+
+        int totalW = SV_SIZE + HUE_GAP + HUE_W + PICKER_PAD * 2;
+        int totalH = SV_SIZE + PICKER_PAD * 2 + 20;
+        pickerX = Mth.clamp(f.box().getX(), 4, Math.max(4, vw - totalW - 4));
+        pickerY = Mth.clamp(f.box().getY() + 18, 4, Math.max(4, vh - totalH - 4));
+    }
+
+    private void closeColorPicker() {
+        openPickerField = null;
+        draggingSV = false;
+        draggingHue = false;
+    }
+
+    private void applyPickerColor() {
+        if (openPickerField == null) return;
+        int rgb = java.awt.Color.HSBtoRGB(pickerHue, pickerSat, pickerVal) & 0xFFFFFF;
+        String hex = String.format("FF%06X", rgb);
+        openPickerField.target().set(hex);
+        openPickerField.box().setValue(hex);
+        confirmActive = false;
+        syncPalette(PhoenixTheme.current());
+    }
+
+    private void updatePickerSV(double mx, double my, int svX, int svY) {
+        pickerSat = Mth.clamp((float) (mx - svX) / (SV_SIZE - 1), 0f, 1f);
+        pickerVal = 1f - Mth.clamp((float) (my - svY) / (SV_SIZE - 1), 0f, 1f);
+        applyPickerColor();
+    }
+
+    private void updatePickerHue(double my, int svY) {
+        pickerHue = Mth.clamp((float) (my - svY) / (SV_SIZE - 1), 0f, 1f);
+        applyPickerColor();
     }
 
     private void addField(String label, PhoenixTheme.ThemeColor target, int sbX, int y, int boxW) {
@@ -172,21 +254,28 @@ public class PhoenixThemeEditorScreen extends Screen {
     }
 
     @Override
-    public void render(@NotNull GuiGraphics g, int mx, int my, float partial) {
+    public void render(@NotNull GuiGraphics g, int rmx, int rmy, float partial) {
         animTick = PhoenixTheme.isReduceMotion() ? 0L : System.currentTimeMillis();
+
+        int mx = Math.round(rmx / uiScale);
+        int my = Math.round(rmy / uiScale);
+
+        g.pose().pushPose();
+        g.pose().scale(uiScale, uiScale, 1f);
+
         int sbW = sidebarW();
 
         int bgTop = C_BG;
         int bgBot = blend(C_BG, 0xFF000000, 0.35f);
-        g.fillGradient(0, 0, width - sbW, height, bgTop, bgBot);
-        g.fill(width - sbW, 0, width, height, C_PANEL);
-        g.fill(width - sbW, 0, width - sbW + 1, height, C_BORDER);
+        g.fillGradient(0, 0, vw - sbW, vh, bgTop, bgBot);
+        g.fill(vw - sbW, 0, vw, vh, C_PANEL);
+        g.fill(vw - sbW, 0, vw - sbW + 1, vh, C_BORDER);
 
-        g.fill(width - sbW, 0, width, 28, C_HEADER);
+        g.fill(vw - sbW, 0, vw, 28, C_HEADER);
         float headerPulse = animPulse(0.7f, 0.3f, 900.0);
         int headerAccent = (Math.min(255, (int) (0xFF * headerPulse)) << 24) | (C_ACCENT & 0xFFFFFF);
-        g.fill(width - sbW, 27, width, 28, headerAccent);
-        g.drawString(font, "§fTheme Editor", width - sbW + 8, 8, C_ACCENT, false);
+        g.fill(vw - sbW, 27, vw, 28, headerAccent);
+        g.drawString(font, "§fTheme Editor", vw - sbW + 8, 8, C_ACCENT, false);
 
         String status;
         int statusC;
@@ -200,7 +289,7 @@ public class PhoenixThemeEditorScreen extends Screen {
             status = "§7○ " + PhoenixTheme.getActiveName();
             statusC = C_DIM;
         }
-        g.drawString(font, status, width - sbW + 8, 19, statusC, false);
+        g.drawString(font, status, vw - sbW + 8, 19, statusC, false);
 
         for (SectionLabel s : sections) {
             g.drawString(font, "§8" + s.title, s.x, s.y, C_ACCENT, false);
@@ -227,19 +316,74 @@ public class PhoenixThemeEditorScreen extends Screen {
         renderPreview(g, mx, my, sbW);
 
         super.render(g, mx, my, partial);
+
+        if (openPickerField != null) renderColorPicker(g);
+
+        g.pose().popPose();
+    }
+
+    private void renderColorPicker(GuiGraphics g) {
+        g.pose().pushPose();
+        g.pose().translate(0f, 0f, 400f);
+        g.flush();
+
+        int totalW = SV_SIZE + HUE_GAP + HUE_W + PICKER_PAD * 2;
+        int totalH = SV_SIZE + PICKER_PAD * 2 + 20;
+        g.fill(pickerX, pickerY, pickerX + totalW, pickerY + totalH, 0xF00A0A0E);
+        drawBorder(g, pickerX, pickerY, totalW, totalH, C_BORDER);
+
+        int svX = pickerX + PICKER_PAD, svY = pickerY + PICKER_PAD;
+        int cell = 2;
+        for (int px = 0; px < SV_SIZE; px += cell) {
+            float s = px / (float) (SV_SIZE - 1);
+            for (int py = 0; py < SV_SIZE; py += cell) {
+                float v = 1f - py / (float) (SV_SIZE - 1);
+                int rgb = java.awt.Color.HSBtoRGB(pickerHue, s, v);
+                g.fill(svX + px, svY + py, svX + px + cell, svY + py + cell, 0xFF000000 | (rgb & 0xFFFFFF));
+            }
+        }
+        drawBorder(g, svX, svY, SV_SIZE, SV_SIZE, C_BORDER);
+
+        int cursorX = svX + Math.round(pickerSat * (SV_SIZE - 1));
+        int cursorY = svY + Math.round((1f - pickerVal) * (SV_SIZE - 1));
+        drawBorder(g, cursorX - 3, cursorY - 3, 6, 6, pickerVal > 0.5f ? 0xFF000000 : 0xFFFFFFFF);
+
+        int hueX = svX + SV_SIZE + HUE_GAP, hueY = svY;
+        for (int py = 0; py < SV_SIZE; py++) {
+            float h = py / (float) (SV_SIZE - 1);
+            int rgb = java.awt.Color.HSBtoRGB(h, 1f, 1f);
+            g.fill(hueX, hueY + py, hueX + HUE_W, hueY + py + 1, 0xFF000000 | (rgb & 0xFFFFFF));
+        }
+        drawBorder(g, hueX, hueY, HUE_W, SV_SIZE, C_BORDER);
+        int hueMarkerY = hueY + Math.round(pickerHue * (SV_SIZE - 1));
+        g.fill(hueX - 2, hueMarkerY - 1, hueX + HUE_W + 2, hueMarkerY, 0xFFFFFFFF);
+        g.fill(hueX - 2, hueMarkerY, hueX + HUE_W + 2, hueMarkerY + 1, 0xFF000000);
+
+        int previewY = svY + SV_SIZE + 4;
+        int rgbNow = java.awt.Color.HSBtoRGB(pickerHue, pickerSat, pickerVal);
+        g.fill(svX, previewY, svX + totalW - PICKER_PAD * 2, previewY + 12, 0xFF000000 | (rgbNow & 0xFFFFFF));
+        drawBorder(g, svX, previewY, totalW - PICKER_PAD * 2, 12, C_BORDER);
+        String hex = String.format("#%06X", rgbNow & 0xFFFFFF);
+        int hexTextColor = (0.299f * ((rgbNow >> 16) & 0xFF) + 0.587f * ((rgbNow >> 8) & 0xFF) +
+                0.114f * (rgbNow & 0xFF)) > 140 ? 0xFF000000 : 0xFFFFFFFF;
+        g.drawCenteredString(font, hex, svX + (totalW - PICKER_PAD * 2) / 2, previewY + 2, hexTextColor);
+
+        g.flush();
+        g.pose().popPose();
     }
 
     private void renderPreview(GuiGraphics g, int mx, int my, int sbW) {
         PhoenixTheme t = PhoenixTheme.current();
-        int canvasW = width - sbW;
+        int canvasW = vw - sbW;
         int mockW = Math.min(canvasW - 20, 360);
         int mockX = 10;
 
         int animY = 8;
-        g.drawString(font, "§7Node states · dep line · text hierarchy", mockX, animY, C_FAINT, false);
+
+        g.drawString(font, "§7State colors · accent line · text hierarchy", mockX, animY, C_FAINT, false);
 
         int mockTop = animY + 13;
-        int mockH = Math.min(150, (height - 20) / 2);
+        int mockH = Math.min(150, (vh - 20) / 2);
 
         g.fill(mockX, mockTop, mockX + mockW, mockTop + mockH, t.bg.getColor());
         drawBorder(g, mockX, mockTop, mockW, mockH, t.border.getColor());
@@ -252,9 +396,10 @@ public class PhoenixThemeEditorScreen extends Screen {
         int sideW = Math.min(52, mockW / 5);
         g.fill(mockX, mockTop + hdrH, mockX + sideW, mockTop + mockH, t.panel.getColor());
         g.fill(mockX + sideW, mockTop + hdrH, mockX + sideW + 1, mockTop + mockH, t.border.getColor());
-        g.drawString(font, "§8All", mockX + 4, mockTop + hdrH + 4, t.textDim.getColor(), false);
-        g.drawString(font, "§8Main", mockX + 4, mockTop + hdrH + 15, t.textFaint.getColor(), false);
-        g.drawString(font, "§8Expert", mockX + 4, mockTop + hdrH + 26, t.textFaint.getColor(), false);
+        int navBarW = Math.max(4, sideW - 12);
+        g.fill(mockX + 4, mockTop + hdrH + 4, mockX + 4 + navBarW, mockTop + hdrH + 9, t.textDim.getColor());
+        g.fill(mockX + 4, mockTop + hdrH + 15, mockX + 4 + navBarW, mockTop + hdrH + 20, t.textFaint.getColor());
+        g.fill(mockX + 4, mockTop + hdrH + 26, mockX + 4 + navBarW, mockTop + hdrH + 31, t.textFaint.getColor());
 
         int sz = Math.max(16, Math.min(26, (mockW - sideW - 30) / 6));
         int n1x = mockX + sideW + 14;
@@ -316,11 +461,11 @@ public class PhoenixThemeEditorScreen extends Screen {
 
         List<String> vis = visibleThemes();
         int itemH = 14;
-        int maxVis = Math.max(1, (height - listY - 6) / itemH);
+        int maxVis = Math.max(1, (vh - listY - 6) / itemH);
         int maxScroll = Math.max(0, vis.size() - maxVis);
         scrollOffset = Mth.clamp(scrollOffset, 0, maxScroll);
 
-        for (int i = scrollOffset; i < vis.size() && listY + itemH <= height - 4; i++) {
+        for (int i = scrollOffset; i < vis.size() && listY + itemH <= vh - 4; i++) {
             String name = vis.get(i);
             boolean sel = name.equals(PhoenixTheme.getActiveName());
             boolean hov = mx >= mockX && mx <= mockX + mockW && my >= listY && my < listY + itemH;
@@ -344,11 +489,47 @@ public class PhoenixThemeEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mx, double my, int btn) {
+    public boolean mouseClicked(double rmx, double rmy, int btn) {
+        double mx = rmx / uiScale;
+        double my = rmy / uiScale;
+
         if (btn != 0) return super.mouseClicked(mx, my, btn);
 
+        if (openPickerField != null) {
+            int svX = pickerX + PICKER_PAD, svY = pickerY + PICKER_PAD;
+            int hueX = svX + SV_SIZE + HUE_GAP;
+            if (mx >= svX && mx < svX + SV_SIZE && my >= svY && my < svY + SV_SIZE) {
+                pushUndo();
+                draggingSV = true;
+                updatePickerSV(mx, my, svX, svY);
+                return true;
+            }
+            if (mx >= hueX - 2 && mx < hueX + HUE_W + 2 && my >= svY && my < svY + SV_SIZE) {
+                pushUndo();
+                draggingHue = true;
+                updatePickerHue(my, svY);
+                return true;
+            }
+            int totalW = SV_SIZE + HUE_GAP + HUE_W + PICKER_PAD * 2;
+            int totalH = SV_SIZE + PICKER_PAD * 2 + 20;
+            if (mx < pickerX || mx >= pickerX + totalW || my < pickerY || my >= pickerY + totalH) {
+                closeColorPicker();
+                return true;
+            }
+            return true;
+        }
+
+        for (FieldEntry f : fields) {
+            int sx = f.box().getX() + f.box().getWidth() + 3;
+            int sy = f.box().getY();
+            if (mx >= sx && mx < sx + 14 && my >= sy && my < sy + 14) {
+                openColorPicker(f);
+                return true;
+            }
+        }
+
         int sbW = sidebarW();
-        int canvasW = width - sbW;
+        int canvasW = vw - sbW;
         int mockW = Math.min(canvasW - 20, 360);
         int mockX = 10;
         int itemH = 14;
@@ -356,16 +537,14 @@ public class PhoenixThemeEditorScreen extends Screen {
         List<String> vis = visibleThemes();
         int listY = listRowsStartY;
 
-        for (int i = scrollOffset; i < vis.size() && listY + itemH <= height - 4; i++) {
+        for (int i = scrollOffset; i < vis.size() && listY + itemH <= vh - 4; i++) {
             String name = vis.get(i);
             if (my >= listY && my < listY + itemH) {
 
                 if (!PhoenixTheme.isBuiltin(name)) {
                     int dX = mockX + mockW - 14;
                     if (mx >= dX && mx <= dX + 12) {
-                        pendingDeletions.add(name.toUpperCase(Locale.ROOT));
-                        if (name.equalsIgnoreCase(PhoenixTheme.getActiveName()))
-                            PhoenixTheme.setCurrent("DARK");
+                        PhoenixTheme.deleteCustom(name);
                         confirmActive = false;
                         pendingAction = null;
                         lastTrackedName = null;
@@ -398,12 +577,34 @@ public class PhoenixThemeEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mx, double my, double delta) {
+    public boolean mouseDragged(double rmx, double rmy, int btn, double dragX, double dragY) {
+        double mx = rmx / uiScale;
+        double my = rmy / uiScale;
+        if (draggingSV || draggingHue) {
+            int svX = pickerX + PICKER_PAD, svY = pickerY + PICKER_PAD;
+            if (draggingSV) updatePickerSV(mx, my, svX, svY);
+            else updatePickerHue(my, svY);
+            return true;
+        }
+        return super.mouseDragged(mx, my, btn, dragX / uiScale, dragY / uiScale);
+    }
+
+    @Override
+    public boolean mouseReleased(double rmx, double rmy, int btn) {
+        draggingSV = false;
+        draggingHue = false;
+        return super.mouseReleased(rmx / uiScale, rmy / uiScale, btn);
+    }
+
+    @Override
+    public boolean mouseScrolled(double rmx, double rmy, double delta) {
+        double mx = rmx / uiScale;
+        double my = rmy / uiScale;
         int sbW = sidebarW();
-        if (mx < width - sbW) {
+        if (mx < vw - sbW) {
             List<String> vis = visibleThemes();
             int itemH = 14;
-            int maxVis = Math.max(1, (height - listRowsStartY - 6) / itemH);
+            int maxVis = Math.max(1, (vh - listRowsStartY - 6) / itemH);
             int maxScroll = Math.max(0, vis.size() - maxVis);
             scrollOffset = Mth.clamp(scrollOffset - (int) delta, 0, maxScroll);
             return true;
@@ -413,6 +614,10 @@ public class PhoenixThemeEditorScreen extends Screen {
 
     @Override
     public boolean keyPressed(int key, int scan, int mods) {
+        if (key == 256 && openPickerField != null) {
+            closeColorPicker();
+            return true;
+        }
         if (hasControlDown()) {
             if (key == 90) {
                 tryUndo();
@@ -429,7 +634,6 @@ public class PhoenixThemeEditorScreen extends Screen {
     private void save() {
         String name = nameInput != null ? nameInput.getValue().trim().toUpperCase(Locale.ROOT) : "";
         if (name.isEmpty()) return;
-        pendingDeletions.remove(name);
         PhoenixTheme copy = PhoenixTheme.current().copy();
         PhoenixTheme.saveCustomTheme(name, copy);
         PhoenixTheme.setCurrent(name);
@@ -477,6 +681,7 @@ public class PhoenixThemeEditorScreen extends Screen {
             case "Done" -> s.done();
             case "Active" -> s.active();
             case "Locked" -> s.locked();
+            case "Ally" -> s.ally();
             default -> null;
         };
     }
@@ -490,7 +695,7 @@ public class PhoenixThemeEditorScreen extends Screen {
     private Snap makeSnap(PhoenixTheme t, String name) {
         return new Snap(t.bg.hex, t.panel.hex, t.header.hex, t.border.hex, t.accent.hex,
                 t.text.hex, t.textDim.hex, t.textFaint.hex, t.done.hex,
-                t.activeColor.hex, t.locked.hex, name);
+                t.activeColor.hex, t.locked.hex, t.ally.hex, name);
     }
 
     private void restore(Snap s) {
@@ -506,13 +711,12 @@ public class PhoenixThemeEditorScreen extends Screen {
         t.done.set(s.done());
         t.activeColor.set(s.active());
         t.locked.set(s.locked());
+        t.ally.set(s.ally());
         syncPalette(t);
     }
 
     @Override
     public void onClose() {
-        for (String name : pendingDeletions) PhoenixTheme.deleteCustom(name);
-        pendingDeletions.clear();
         Minecraft.getInstance().setScreen(parent);
     }
 
@@ -525,15 +729,11 @@ public class PhoenixThemeEditorScreen extends Screen {
     public void renderBackground(@NotNull GuiGraphics g) {}
 
     private int sidebarW() {
-        return Math.max(SIDEBAR_MIN, width / 4);
+        return Math.max(SIDEBAR_MIN, vw / 4);
     }
 
     private List<String> visibleThemes() {
-        List<String> out = new ArrayList<>();
-        for (String name : PhoenixTheme.REGISTRY.keySet()) {
-            if (!pendingDeletions.contains(name.toUpperCase(Locale.ROOT))) out.add(name);
-        }
-        return out;
+        return new ArrayList<>(PhoenixTheme.REGISTRY.keySet());
     }
 
     private static void drawBorder(GuiGraphics g, int x, int y, int w, int h, int c) {

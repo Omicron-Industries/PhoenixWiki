@@ -39,6 +39,12 @@ public class WikiScreen extends Screen {
 
     private static int savedSidebarW = -1;
 
+    private static final int MIN_CONTENT_W = MIN_SIDEBAR_W + 260;
+    private static final int MIN_CONTENT_H = HEADER_H + FOOTER_H + 200;
+
+    private float uiScale = 1f;
+    private int vw, vh;
+
     private final Screen parent;
     private final String namespace;
     private final String basePath;
@@ -96,6 +102,12 @@ public class WikiScreen extends Screen {
 
     @Override
     protected void init() {
+        uiScale = (width < MIN_CONTENT_W || height < MIN_CONTENT_H) ?
+                Math.min((float) width / MIN_CONTENT_W, (float) height / MIN_CONTENT_H) : 1f;
+        uiScale = Math.max(0.1f, uiScale);
+        vw = Math.round(width / uiScale);
+        vh = Math.round(height / uiScale);
+
         if (pages.isEmpty()) {
             pages = WikiPageLoader.loadPages(namespace, basePath);
         }
@@ -122,12 +134,12 @@ public class WikiScreen extends Screen {
                 b -> {
                     if (minecraft != null) minecraft.setScreen(parent);
                 })
-                .bounds(width / 2 - 36, height - FOOTER_H + 6, 72, 16).build());
+                .bounds(vw / 2 - 36, vh - FOOTER_H + 6, 72, 16).build());
 
         addRenderableWidget(Button.builder(Component.literal("§7+ New"), b -> openNewPageEditor())
-                .bounds(width - 8 - 44 - 4 - 44, 6, 44, 16).build());
+                .bounds(vw - 8 - 44 - 4 - 44, 6, 44, 16).build());
         addRenderableWidget(Button.builder(Component.literal("§7✎ Edit"), b -> openEditCurrentPage())
-                .bounds(width - 8 - 44, 6, 44, 16).build());
+                .bounds(vw - 8 - 44, 6, 44, 16).build());
     }
 
     private void openEditCurrentPage() {
@@ -184,7 +196,7 @@ public class WikiScreen extends Screen {
     }
 
     private int clampSidebarW(int w) {
-        int upper = Math.min(MAX_SIDEBAR_W, width / 2);
+        int upper = Math.min(MAX_SIDEBAR_W, vw / 2);
         return Math.max(MIN_SIDEBAR_W, Math.min(upper, w));
     }
 
@@ -214,7 +226,7 @@ public class WikiScreen extends Screen {
     private void jumpToSearchMatch(String q) {
         if (pages.isEmpty()) return;
         List<RichBlock> blocks = activeBlocks();
-        int cw = width - sidebarW - MARGIN * 2;
+        int cw = vw - sidebarW - MARGIN * 2;
         if (cw <= 0) return;
         float scale = pageScale(blocks);
         int y = 0;
@@ -323,11 +335,22 @@ public class WikiScreen extends Screen {
     @Override
     public void renderBackground(@NotNull GuiGraphics g) {}
 
+    private void enableScissorScaled(GuiGraphics g, int x1, int y1, int x2, int y2) {
+        g.enableScissor(Math.round(x1 * uiScale), Math.round(y1 * uiScale), Math.round(x2 * uiScale),
+                Math.round(y2 * uiScale));
+    }
+
     @Override
-    public void render(@NotNull GuiGraphics g, int mx, int my, float partial) {
+    public void render(@NotNull GuiGraphics g, int rmx, int rmy, float partial) {
         recomputeVisibleIndices();
 
-        g.fill(0, 0, width, height, theme.bg());
+        int mx = Math.round(rmx / uiScale);
+        int my = Math.round(rmy / uiScale);
+
+        g.pose().pushPose();
+        g.pose().scale(uiScale, uiScale, 1f);
+
+        g.fill(0, 0, vw, vh, theme.bg());
 
         String title = pages.isEmpty() ? "Wiki" : pages.get(Math.min(activePage, pages.size() - 1)).title();
         drawHeader(g, "§fWiki  §8— §7" + title);
@@ -336,9 +359,9 @@ public class WikiScreen extends Screen {
         searchBox.setY(HEADER_H + 3);
         searchBox.setWidth(sidebarW - 8);
 
-        int sidebarClipBot = height - FOOTER_H;
+        int sidebarClipBot = vh - FOOTER_H;
         int listTop = HEADER_H + LIST_TOP_OFFSET;
-        g.enableScissor(0, listTop, sidebarW, sidebarClipBot);
+        enableScissorScaled(g, 0, listTop, sidebarW, sidebarClipBot);
         g.fill(0, listTop, sidebarW, sidebarClipBot, theme.panel());
         List<SidebarEntry> entries = buildSidebarEntries();
         for (int row = 0; row < entries.size(); row++) {
@@ -377,20 +400,20 @@ public class WikiScreen extends Screen {
         g.disableScissor();
 
         boolean handleHov = mx >= sidebarW - HANDLE_W / 2 && mx < sidebarW + HANDLE_W / 2 + 1 &&
-                my >= HEADER_H && my < height - FOOTER_H;
-        g.fill(sidebarW - 1, HEADER_H, sidebarW, height - FOOTER_H, theme.border());
+                my >= HEADER_H && my < vh - FOOTER_H;
+        g.fill(sidebarW - 1, HEADER_H, sidebarW, vh - FOOTER_H, theme.border());
         if (handleHov || draggingSidebar) {
-            g.fill(sidebarW - 1, HEADER_H, sidebarW + 1, height - FOOTER_H, theme.accent());
+            g.fill(sidebarW - 1, HEADER_H, sidebarW + 1, vh - FOOTER_H, theme.accent());
         }
 
         drawFooter(g);
 
         int cx = sidebarW + MARGIN;
-        int cw = width - cx - MARGIN;
+        int cw = vw - cx - MARGIN;
         int contentTop = HEADER_H + MARGIN;
-        int contentBot = height - FOOTER_H - MARGIN;
+        int contentBot = vh - FOOTER_H - MARGIN;
 
-        g.enableScissor(cx, contentTop, cx + cw, contentBot);
+        enableScissorScaled(g, cx, contentTop, cx + cw, contentBot);
         List<RichBlock> blocks = activeBlocks();
         float scale = pageScale(blocks);
         richRegions = WikiRichTextRenderer.renderBlocks(g, font, blocks, cx, contentTop, cw,
@@ -398,7 +421,7 @@ public class WikiScreen extends Screen {
         g.disableScissor();
 
         cachedContentH = WikiRichTextRenderer.measureBlocksHeight(font, blocks, cw, scale, expandedKeys);
-        drawScrollbar(g, width - MARGIN / 2, contentTop, contentBot, scrollY, cachedContentH);
+        drawScrollbar(g, vw - MARGIN / 2, contentTop, contentBot, scrollY, cachedContentH);
 
         renderToc(g, blocks, cx, cw, contentTop, contentBot, mx, my, scale);
 
@@ -443,18 +466,20 @@ public class WikiScreen extends Screen {
         }
 
         super.render(g, mx, my, partial);
+
+        g.pose().popPose();
     }
 
     private void drawHeader(GuiGraphics g, String titleText) {
-        g.fill(0, 0, width, HEADER_H, theme.header());
-        g.fill(0, HEADER_H - 1, width, HEADER_H, theme.border());
-        g.drawCenteredString(font, titleText, width / 2, (HEADER_H / 2) - (font.lineHeight / 2), theme.text());
+        g.fill(0, 0, vw, HEADER_H, theme.header());
+        g.fill(0, HEADER_H - 1, vw, HEADER_H, theme.border());
+        g.drawCenteredString(font, titleText, vw / 2, (HEADER_H / 2) - (font.lineHeight / 2), theme.text());
     }
 
     private void drawFooter(GuiGraphics g) {
-        int topY = height - FOOTER_H;
-        g.fill(0, topY, width, height, theme.header());
-        g.fill(0, topY, width, topY + 1, theme.border());
+        int topY = vh - FOOTER_H;
+        g.fill(0, topY, vw, vh, theme.header());
+        g.fill(0, topY, vw, topY + 1, theme.border());
     }
 
     private static void drawScrollbar(GuiGraphics g, int rightMarginX, int topBoundsY, int bottomBoundsY,
@@ -520,15 +545,17 @@ public class WikiScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mx, double my, double delta) {
-        int visibleH = (height - FOOTER_H - MARGIN) - (HEADER_H + MARGIN);
+    public boolean mouseScrolled(double rmx, double rmy, double delta) {
+        int visibleH = (vh - FOOTER_H - MARGIN) - (HEADER_H + MARGIN);
         int maxScroll = Math.max(0, cachedContentH - visibleH);
         scrollY = Math.max(0, Math.min(maxScroll, (int) (scrollY - delta * 14)));
         return true;
     }
 
     @Override
-    public boolean mouseClicked(double mx, double my, int btn) {
+    public boolean mouseClicked(double rmx, double rmy, int btn) {
+        double mx = rmx / uiScale;
+        double my = rmy / uiScale;
         if (btn == 0) {
             for (RichSpan.Region r : tocRegions) {
                 if (r.contains(mx, my) && r.span() instanceof RichSpan.TocJump jump) {
@@ -542,12 +569,12 @@ public class WikiScreen extends Screen {
             }
 
             if (mx >= sidebarW - HANDLE_W / 2 && mx < sidebarW + HANDLE_W / 2 + 1 &&
-                    my >= HEADER_H && my < height - FOOTER_H) {
+                    my >= HEADER_H && my < vh - FOOTER_H) {
                 draggingSidebar = true;
                 return true;
             }
 
-            int sidebarClipBot = height - FOOTER_H;
+            int sidebarClipBot = vh - FOOTER_H;
             int listTop = HEADER_H + LIST_TOP_OFFSET;
             if (mx >= 0 && mx < sidebarW && my >= listTop) {
                 List<SidebarEntry> entries = buildSidebarEntries();
@@ -608,22 +635,24 @@ public class WikiScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mx, double my, int btn, double dragX, double dragY) {
+    public boolean mouseDragged(double rmx, double rmy, int btn, double dragX, double dragY) {
+        double mx = rmx / uiScale;
+        double my = rmy / uiScale;
         if (draggingSidebar) {
             sidebarW = clampSidebarW((int) mx);
             return true;
         }
-        return super.mouseDragged(mx, my, btn, dragX, dragY);
+        return super.mouseDragged(mx, my, btn, dragX / uiScale, dragY / uiScale);
     }
 
     @Override
-    public boolean mouseReleased(double mx, double my, int btn) {
+    public boolean mouseReleased(double rmx, double rmy, int btn) {
         if (draggingSidebar) {
             draggingSidebar = false;
             savedSidebarW = sidebarW;
             return true;
         }
-        return super.mouseReleased(mx, my, btn);
+        return super.mouseReleased(rmx / uiScale, rmy / uiScale, btn);
     }
 
     @Override

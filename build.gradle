@@ -119,3 +119,47 @@ tasks.register('publishToGuilds', Copy) {
     }
     into '../Phoenix-Guilds/libs'
 }
+
+tasks.register('publishToDomains', Copy) {
+    group = 'phoenix'
+    description = 'Builds this mod and copies the jar into ../Phoenix-Domains/libs, so Domains picks up local changes.'
+    dependsOn 'reobfJar'
+    from(layout.buildDirectory.dir('libs')) {
+        include '*.jar'
+        exclude '*-sources.jar'
+    }
+    into '../Phoenix-Domains/libs'
+}
+
+tasks.register('publishToExcavate', Copy) {
+    group = 'phoenix'
+    description = 'Builds this mod and copies the jar into ../PhoenixExcavate/libs, so Excavate picks up local changes.'
+    dependsOn 'reobfJar'
+    from(layout.buildDirectory.dir('libs')) {
+        include '*.jar'
+        exclude '*-sources.jar'
+    }
+    into '../PhoenixExcavate/libs'
+}
+
+tasks.register('publishToEssentials', Copy) {
+    group = 'phoenix'
+    description = 'Builds this mod and copies the jar into ../PhoenixEssentials/libs, so Essentials picks up local changes.'
+    dependsOn 'reobfJar'
+    from(layout.buildDirectory.dir('libs')) {
+        include '*.jar'
+        exclude '*-sources.jar'
+    }
+    into '../PhoenixEssentials/libs'
+}
+
+tasks.register('publishToSolaris', Copy) {
+    group = 'phoenix'
+    description = 'Builds this mod and copies the jar into ../Solaris/libs, so Solaris picks up local changes.'
+    dependsOn 'reobfJar'
+    from(layout.buildDirectory.dir('libs')) {
+        include '*.jar'
+        exclude '*-sources.jar'
+    }
+    into '../Solaris/libs'
+}

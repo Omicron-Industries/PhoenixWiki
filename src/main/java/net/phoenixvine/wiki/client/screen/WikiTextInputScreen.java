@@ -64,6 +64,12 @@ public class WikiTextInputScreen extends Screen {
 
     private int pw, ph, px, py, btnY;
 
+    private static final int MIN_PANEL_W = 620;
+    private static final int MIN_PANEL_H = 420;
+
+    private float uiScale = 1f;
+    private int vw, vh;
+
     public WikiTextInputScreen(Screen parent, String fieldLabel, String initial, int maxLength,
                                Consumer<String> onConfirm) {
         super(Component.literal(fieldLabel));
@@ -80,10 +86,18 @@ public class WikiTextInputScreen extends Screen {
     protected void init() {
         super.init();
 
-        this.pw = Math.min(900, width - 80);
-        this.ph = Math.min(700, height - 80);
-        this.px = (width - pw) / 2;
-        this.py = (height - ph) / 2;
+        float neededW = MIN_PANEL_W + 80f;
+        float neededH = MIN_PANEL_H + 80f;
+        uiScale = (width < neededW || height < neededH) ?
+                Math.min(width / neededW, height / neededH) : 1f;
+        uiScale = Math.max(0.1f, uiScale);
+        vw = Math.round(width / uiScale);
+        vh = Math.round(height / uiScale);
+
+        this.pw = Math.min(900, vw - 80);
+        this.ph = Math.min(700, vh - 80);
+        this.px = (vw - pw) / 2;
+        this.py = (vh - ph) / 2;
         this.btnY = py + ph - 24;
 
         inputBox = addRenderableWidget(new MultilineTextArea(font, px + 8, py + 26, pw - 16, ph - 86, maxLength));
@@ -98,8 +112,14 @@ public class WikiTextInputScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics g, int mx, int my, float partial) {
+    public void render(GuiGraphics g, int rmx, int rmy, float partial) {
         g.fill(0, 0, width, height, C_BG);
+
+        int mx = Math.round(rmx / uiScale);
+        int my = Math.round(rmy / uiScale);
+
+        g.pose().pushPose();
+        g.pose().scale(uiScale, uiScale, 1f);
 
         g.fill(px, py, px + pw, py + ph, C_PANEL);
         drawBorder(g, px, py, pw, ph, C_BORDER);
@@ -122,6 +142,8 @@ public class WikiTextInputScreen extends Screen {
         int half = pw / 2 - 6;
         drawBtn(g, mx, my, px + 6, btnY, half, 16, "§a✓ Confirm", C_GREEN);
         drawBtn(g, mx, my, px + pw / 2 + 3, btnY, half, 16, "§c✕ Cancel", C_BTN);
+
+        g.pose().popPose();
     }
 
     private static void drawBorder(GuiGraphics g, int x, int y, int w, int h, int color) {
@@ -206,7 +228,9 @@ public class WikiTextInputScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mx, double my, int btn) {
+    public boolean mouseClicked(double rmx, double rmy, int btn) {
+        double mx = rmx / uiScale;
+        double my = rmy / uiScale;
         if (super.mouseClicked(mx, my, btn)) return true;
 
         int half = pw / 2 - 6;
@@ -278,9 +302,19 @@ public class WikiTextInputScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mx, double my, double delta) {
+    public boolean mouseScrolled(double rmx, double rmy, double delta) {
         if (inputBox.scrollBy(delta)) return true;
-        return super.mouseScrolled(mx, my, delta);
+        return super.mouseScrolled(rmx / uiScale, rmy / uiScale, delta);
+    }
+
+    @Override
+    public boolean mouseDragged(double rmx, double rmy, int btn, double dragX, double dragY) {
+        return super.mouseDragged(rmx / uiScale, rmy / uiScale, btn, dragX / uiScale, dragY / uiScale);
+    }
+
+    @Override
+    public boolean mouseReleased(double rmx, double rmy, int btn) {
+        return super.mouseReleased(rmx / uiScale, rmy / uiScale, btn);
     }
 
     private void confirm() {
