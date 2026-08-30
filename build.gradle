@@ -163,3 +163,14 @@ tasks.register('publishToSolaris', Copy) {
     }
     into '../Solaris/libs'
 }
+
+tasks.register('publishToCore', Copy) {
+    group = 'phoenix'
+    description = 'Builds this mod and copies the jar into ../PhoenixCore/libs, so PhoenixCore picks up local changes.'
+    dependsOn 'reobfJar'
+    from(layout.buildDirectory.dir('libs')) {
+        include '*.jar'
+        exclude '*-sources.jar'
+    }
+    into '../PhoenixCore/libs'
+}
