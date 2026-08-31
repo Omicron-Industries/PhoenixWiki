@@ -48,7 +48,8 @@ public final class WikiChecklistProgress {
         Path file = fileFor(namespace);
         if (!Files.exists(file)) return;
         try {
-            CompoundTag tag = NbtIo.read(file.toFile());
+
+            CompoundTag tag = NbtIo.read(file);
             if (tag == null) return;
             for (String key : tag.getAllKeys()) {
                 STATE.put(namespace + "#" + key, tag.getBoolean(key));
@@ -66,7 +67,8 @@ public final class WikiChecklistProgress {
         try {
             Path file = fileFor(namespace);
             Files.createDirectories(file.getParent());
-            NbtIo.write(tag, file.toFile());
+            
+            NbtIo.write(tag, file);
         } catch (IOException ignored) {}
     }
 

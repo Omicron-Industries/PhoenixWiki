@@ -393,7 +393,7 @@ public final class WikiMarkdownParser {
                         String tooltip = bar >= 0 ? itemPart.substring(bar + 1).trim() : null;
                         if (tooltip != null && tooltip.isEmpty()) tooltip = null;
                         try {
-                            out.add(new RichSpan.ItemIcon(new ResourceLocation(idPart.trim()), tooltip));
+                            out.add(new RichSpan.ItemIcon(ResourceLocation.fromNamespaceAndPath(idPart.trim(), tooltip)));
                         } catch (Exception ignored) {}
                         i = bracketEnd + 1;
                         continue;
@@ -494,7 +494,7 @@ public final class WikiMarkdownParser {
             } catch (NumberFormatException ignored) {}
         }
         try {
-            out.add(new RichSpan.Image(new ResourceLocation(rlPart), w, h));
+            out.add(new RichSpan.Image(ResourceLocation.parse(rlPart), w, h));
         } catch (Exception ignored) {}
     }
 

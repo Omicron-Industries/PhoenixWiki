@@ -85,8 +85,7 @@ public class WikiScreen extends Screen {
     private List<SidebarEntry> buildSidebarEntries() {
         List<SidebarEntry> out = new ArrayList<>();
         String lastChapter = " ";
-        for (int row = 0; row < visibleIndices.size(); row++) {
-            int i = visibleIndices.get(row);
+        for (int i : visibleIndices) {
             String chapter = pages.get(i).chapter();
             String key = chapter == null ? "" : chapter;
             if (!key.equals(lastChapter)) {
@@ -213,7 +212,7 @@ public class WikiScreen extends Screen {
         if (!q.equals(lastSearchQuery)) {
             lastSearchQuery = q;
             if (!q.isEmpty() && !out.isEmpty()) {
-                if (!out.contains(activePage)) activePage = out.get(0);
+                if (!out.contains(activePage)) activePage = out.getFirst();
                 jumpToSearchMatch(q);
             }
         }
@@ -255,10 +254,10 @@ public class WikiScreen extends Screen {
             for (RichBlock child : s.children()) if (blockContainsText(child, lowerQ)) return true;
             return false;
         }
-        if (b instanceof RichBlock.Table t) {
-            for (List<RichSpan> row : t.header())
+        if (b instanceof RichBlock.Table(List<List<RichSpan>> header, List<List<List<RichSpan>>> rows)) {
+            for (List<RichSpan> row : header)
                 for (RichSpan s : row) if (spanText(s).toLowerCase().contains(lowerQ)) return true;
-            for (List<List<RichSpan>> row : t.rows())
+            for (List<List<RichSpan>> row : rows)
                 for (List<RichSpan> cell : row)
                     for (RichSpan s : cell) if (spanText(s).toLowerCase().contains(lowerQ)) return true;
             return false;
@@ -324,20 +323,23 @@ public class WikiScreen extends Screen {
     private float pageScale(List<RichBlock> blocks) {
         float mult = 1.0f;
         for (RichBlock b : blocks) {
-            if (b instanceof RichBlock.ScaleDirective sd) {
-                mult = sd.multiplier();
+            if (b instanceof RichBlock.ScaleDirective(float multiplier)) {
+                mult = multiplier;
                 break;
             }
         }
         return WikiRichTextRenderer.DEFAULT_SCALE * mult;
     }
 
-    @Override
-    public void renderBackground(@NotNull GuiGraphics g) {}
-
     private void enableScissorScaled(GuiGraphics g, int x1, int y1, int x2, int y2) {
         g.enableScissor(Math.round(x1 * uiScale), Math.round(y1 * uiScale), Math.round(x2 * uiScale),
                 Math.round(y2 * uiScale));
+    }
+
+    @Override
+    public void renderBackground(@NotNull GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        super.renderBackground(g, mouseX, mouseY, partialTick);
+        g.fill(0, 0, width, height, theme.bg());
     }
 
     @Override
@@ -349,8 +351,6 @@ public class WikiScreen extends Screen {
 
         g.pose().pushPose();
         g.pose().scale(uiScale, uiScale, 1f);
-
-        g.fill(0, 0, vw, vh, theme.bg());
 
         String title = pages.isEmpty() ? "Wiki" : pages.get(Math.min(activePage, pages.size() - 1)).title();
         drawHeader(g, "§fWiki  §8— §7" + title);
@@ -425,34 +425,12 @@ public class WikiScreen extends Screen {
 
         renderToc(g, blocks, cx, cw, contentTop, contentBot, mx, my, scale);
 
-        for (RichSpan.Region r : richRegions) {
-            if (!r.contains(mx, my)) continue;
-            if (r.span() instanceof RichSpan.Tip t) {
-                g.pose().pushPose();
-                g.pose().translate(0f, 0f, 500f);
-                List<net.minecraft.util.FormattedCharSequence> lines =
-                        font.split(Component.literal(t.tooltip()), 240);
-                g.renderTooltip(font, lines, mx, my);
-                g.pose().popPose();
-                break;
-            }
-            if (r.span() instanceof RichSpan.ItemIcon icon && icon.tooltip() != null && !icon.tooltip().isBlank()) {
-                g.pose().pushPose();
-                g.pose().translate(0f, 0f, 500f);
-                List<net.minecraft.util.FormattedCharSequence> lines =
-                        font.split(Component.literal(icon.tooltip()), 240);
-                g.renderTooltip(font, lines, mx, my);
-                g.pose().popPose();
-                break;
-            }
-        }
-
         if (justCopiedCode != null) {
             if (System.currentTimeMillis() - justCopiedAtMs > COPY_FLASH_MS) {
                 justCopiedCode = null;
             } else {
                 for (RichSpan.Region r : richRegions) {
-                    if (r.span() instanceof RichSpan.CodeCopy cc && cc.code().equals(justCopiedCode)) {
+                    if (r.span() instanceof RichSpan.CodeCopy(String code) && code.equals(justCopiedCode)) {
                         String msg = "§a✓ Copied!";
                         int labelX = cx + cw - font.width(msg) - 4;
                         g.pose().pushPose();
@@ -468,6 +446,20 @@ public class WikiScreen extends Screen {
         super.render(g, mx, my, partial);
 
         g.pose().popPose();
+
+        for (RichSpan.Region r : richRegions) {
+            if (!r.contains(mx, my)) continue;
+            if (r.span() instanceof RichSpan.Tip t) {
+                List<net.minecraft.util.FormattedCharSequence> lines = font.split(Component.literal(t.tooltip()), 240);
+                g.renderTooltip(font, lines, rmx, rmy);
+                break;
+            }
+            if (r.span() instanceof RichSpan.ItemIcon icon && icon.tooltip() != null && !icon.tooltip().isBlank()) {
+                List<net.minecraft.util.FormattedCharSequence> lines = font.split(Component.literal(icon.tooltip()), 240);
+                g.renderTooltip(font, lines, rmx, rmy);
+                break;
+            }
+        }
     }
 
     private void drawHeader(GuiGraphics g, String titleText) {
@@ -511,20 +503,19 @@ public class WikiScreen extends Screen {
         }
 
         int boxX = cx + cw - TOC_W;
-        int boxY = contentTop;
         String toggleLabel = tocOpen ? "§7On this page ▾" : "§7On this page ▸";
         int toggleH = 12;
-        boolean toggleHov = mx >= boxX && mx < boxX + TOC_W && my >= boxY && my < boxY + toggleH;
+        boolean toggleHov = mx >= boxX && mx < boxX + TOC_W && my >= contentTop && my < contentTop + toggleH;
 
         g.pose().pushPose();
         g.pose().translate(0f, 0f, 300f);
-        g.fill(boxX - 4, boxY - 2, boxX + TOC_W, boxY + toggleH + 1, 0xDD16121C);
-        g.drawString(font, toggleHov ? "§f" + toggleLabel.substring(2) : toggleLabel, boxX, boxY, 0xFFCFCFDA, false);
-        regions.add(new RichSpan.Region(boxX - 4, boxY - 2, boxX + TOC_W, boxY + toggleH + 1,
+        g.fill(boxX - 4, contentTop - 2, boxX + TOC_W, contentTop + toggleH + 1, 0xDD16121C);
+        g.drawString(font, toggleHov ? "§f" + toggleLabel.substring(2) : toggleLabel, boxX, contentTop, 0xFFCFCFDA, false);
+        regions.add(new RichSpan.Region(boxX - 4, contentTop - 2, boxX + TOC_W, contentTop + toggleH + 1,
                 new RichSpan.TocJump(-1)));
 
         if (tocOpen) {
-            int rowY = boxY + toggleH + 2;
+            int rowY = contentTop + toggleH + 2;
             int maxScroll = Math.max(0, cachedContentH - (contentBot - contentTop));
             for (WikiRichTextRenderer.HeadingInfo hInfo : headings) {
                 String label = hInfo.text();
@@ -545,58 +536,86 @@ public class WikiScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double rmx, double rmy, double delta) {
+    public boolean mouseScrolled(double rmx, double rmy, double horizontalAmount, double verticalAmount) {
         int visibleH = (vh - FOOTER_H - MARGIN) - (HEADER_H + MARGIN);
         int maxScroll = Math.max(0, cachedContentH - visibleH);
-        scrollY = Math.max(0, Math.min(maxScroll, (int) (scrollY - delta * 14)));
+        scrollY = Math.max(0, Math.min(maxScroll, (int) (scrollY - verticalAmount * 14)));
         return true;
     }
 
     @Override
     public boolean mouseClicked(double rmx, double rmy, int btn) {
+        if (btn != 0) {
+            return super.mouseClicked(rmx / uiScale, rmy / uiScale, btn);
+        }
+
         double mx = rmx / uiScale;
         double my = rmy / uiScale;
-        if (btn == 0) {
-            for (RichSpan.Region r : tocRegions) {
-                if (r.contains(mx, my) && r.span() instanceof RichSpan.TocJump jump) {
-                    if (jump.targetY() < 0) {
-                        tocOpen = !tocOpen;
-                    } else {
-                        scrollY = jump.targetY();
-                    }
-                    return true;
-                }
-            }
 
-            if (mx >= sidebarW - HANDLE_W / 2 && mx < sidebarW + HANDLE_W / 2 + 1 &&
-                    my >= HEADER_H && my < vh - FOOTER_H) {
-                draggingSidebar = true;
+        if (handleTocClick(mx, my)) return true;
+        if (handleSidebarDrag(mx, my)) return true;
+        if (handleSidebarListClick(mx, my)) return true;
+        if (handleRichRegionClick(mx, my)) return true;
+
+        return super.mouseClicked(mx, my, btn);
+    }
+
+    private boolean handleTocClick(double mx, double my) {
+        for (RichSpan.Region r : tocRegions) {
+            if (r.contains(mx, my) && r.span() instanceof RichSpan.TocJump(int targetY)) {
+                if (targetY < 0) {
+                    tocOpen = !tocOpen;
+                } else {
+                    scrollY = targetY;
+                }
                 return true;
             }
+        }
+        return false;
+    }
 
-            int sidebarClipBot = vh - FOOTER_H;
-            int listTop = HEADER_H + LIST_TOP_OFFSET;
-            if (mx >= 0 && mx < sidebarW && my >= listTop) {
-                List<SidebarEntry> entries = buildSidebarEntries();
-                for (int row = 0; row < entries.size(); row++) {
-                    int rowY = listTop + 4 + row * 16;
-                    if (rowY + 14 > sidebarClipBot) break;
-                    if (my >= rowY - 1 && my < rowY + 15) {
-                        SidebarEntry e = entries.get(row);
-                        if (e.isHeader()) {
-                            if (!collapsedChapters.remove(e.chapter())) collapsedChapters.add(e.chapter());
-                        } else {
-                            activePage = e.pageIndex();
-                            scrollY = 0;
-                        }
-                        return true;
-                    }
+    private boolean handleSidebarDrag(double mx, double my) {
+        boolean inHandleX = mx >= sidebarW - (double) HANDLE_W / 2 && mx < sidebarW + (double) HANDLE_W / 2 + 1;
+        boolean inHandleY = my >= HEADER_H && my < vh - FOOTER_H;
+
+        if (inHandleX && inHandleY) {
+            draggingSidebar = true;
+            return true;
+        }
+        return false;
+    }
+
+    private boolean handleSidebarListClick(double mx, double my) {
+        int sidebarClipBot = vh - FOOTER_H;
+        int listTop = HEADER_H + LIST_TOP_OFFSET;
+
+        if (mx < 0 || mx >= sidebarW || my < listTop) return false;
+
+        List<SidebarEntry> entries = buildSidebarEntries();
+        for (int row = 0; row < entries.size(); row++) {
+            int rowY = listTop + 4 + row * 16;
+            if (rowY + 14 > sidebarClipBot) break;
+
+            if (my >= rowY - 1 && my < rowY + 15) {
+                SidebarEntry e = entries.get(row);
+                if (e.isHeader()) {
+                    if (!collapsedChapters.remove(e.chapter())) collapsedChapters.add(e.chapter());
+                } else {
+                    activePage = e.pageIndex();
+                    scrollY = 0;
                 }
+                return true;
             }
+        }
+        return false;
+    }
 
-            for (RichSpan.Region r : richRegions) {
-                if (!r.contains(mx, my)) continue;
-                if (r.span() instanceof RichSpan.Link l) {
+    private boolean handleRichRegionClick(double mx, double my) {
+        for (RichSpan.Region r : richRegions) {
+            if (!r.contains(mx, my)) continue;
+
+            boolean handled = switch (r.span()) {
+                case RichSpan.Link l -> {
                     if (l.url().startsWith("wiki:")) {
                         jumpToPage(l.url().substring(5));
                     } else {
@@ -604,19 +623,19 @@ public class WikiScreen extends Screen {
                             java.awt.Desktop.getDesktop().browse(java.net.URI.create(l.url()));
                         } catch (Exception ignored) {}
                     }
-                    return true;
+                    yield true;
                 }
-                if (r.span() instanceof RichSpan.CodeCopy cc) {
-                    if (minecraft != null) minecraft.keyboardHandler.setClipboard(cc.code());
-                    justCopiedCode = cc.code();
+                case RichSpan.CodeCopy(String code) -> {
+                    if (minecraft != null) minecraft.keyboardHandler.setClipboard(code);
+                    justCopiedCode = code;
                     justCopiedAtMs = System.currentTimeMillis();
-                    return true;
+                    yield true;
                 }
-                if (r.span() instanceof RichSpan.DetailsToggle dt) {
+                case RichSpan.DetailsToggle dt -> {
                     if (!expandedKeys.remove(dt.key())) expandedKeys.add(dt.key());
-                    return true;
+                    yield true;
                 }
-                if (r.span() instanceof RichSpan.ChecklistToggle ct) {
+                case RichSpan.ChecklistToggle ct -> {
                     boolean current = expandedKeys.contains("CL1:" + ct.key())
                             || (!expandedKeys.contains("CL0:" + ct.key()) && ct.checkedDefault());
                     boolean next = !current;
@@ -627,11 +646,14 @@ public class WikiScreen extends Screen {
                         WikiPageLoader.Page page = pages.get(Math.min(activePage, pages.size() - 1));
                         WikiChecklistProgress.setChecked(namespace, page.id(), ct.key(), next);
                     }
-                    return true;
+                    yield true;
                 }
-            }
+                default -> false;
+            };
+
+            if (handled) return true;
         }
-        return super.mouseClicked(mx, my, btn);
+        return false;
     }
 
     @Override

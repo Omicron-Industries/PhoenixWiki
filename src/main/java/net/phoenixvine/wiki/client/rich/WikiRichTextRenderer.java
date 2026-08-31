@@ -2,13 +2,13 @@ package net.phoenixvine.wiki.client.rich;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -849,7 +849,7 @@ public final class WikiRichTextRenderer {
                 }
                 int iconY = curY[0] - (16 - lineH) / 2;
                 if (iconY >= clipTop && iconY + 16 <= clipBot) {
-                    Item item = ForgeRegistries.ITEMS.getValue(icon.itemId());
+                    Item item = BuiltInRegistries.ITEM.get(icon.itemId());
                     if (item != null) {
                         try {
                             g.renderItem(new ItemStack(item), curX, iconY);

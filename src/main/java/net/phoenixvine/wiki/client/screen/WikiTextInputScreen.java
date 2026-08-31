@@ -5,9 +5,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lwjgl.glfw.GLFW;
@@ -112,9 +111,13 @@ public class WikiTextInputScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics g, int rmx, int rmy, float partial) {
+    public void renderBackground(GuiGraphics g, int mx, int my, float pt) {
+        super.renderBackground(g, mx, my, pt);
         g.fill(0, 0, width, height, C_BG);
+    }
 
+    @Override
+    public void render(GuiGraphics g, int rmx, int rmy, float partial) {
         int mx = Math.round(rmx / uiScale);
         int my = Math.round(rmy / uiScale);
 
@@ -123,12 +126,11 @@ public class WikiTextInputScreen extends Screen {
 
         g.fill(px, py, px + pw, py + ph, C_PANEL);
         drawBorder(g, px, py, pw, ph, C_BORDER);
-
         g.fill(px + 1, py, px + pw - 1, py + 2, C_ACCENT);
 
         g.drawCenteredString(font, "§f" + fieldLabel, px + pw / 2, py + 7, C_TEXT);
 
-        int used = inputBox.getValue().length();
+        int used = inputBox != null ? inputBox.getValue().length() : 0;
         boolean atCap = used >= maxLength;
         g.drawString(font, (atCap ? "§c" : "§8") + used + " / " + maxLength,
                 px + pw - 8 - font.width(used + " / " + maxLength), py + 7, C_TEXT_DIM, false);
@@ -144,13 +146,8 @@ public class WikiTextInputScreen extends Screen {
         drawBtn(g, mx, my, px + pw / 2 + 3, btnY, half, 16, "§c✕ Cancel", C_BTN);
 
         g.pose().popPose();
-    }
 
-    private static void drawBorder(GuiGraphics g, int x, int y, int w, int h, int color) {
-        g.fill(x, y, x + w, y + 1, color);
-        g.fill(x, y + h - 1, x + w, y + h, color);
-        g.fill(x, y, x + 1, y + h, color);
-        g.fill(x + w - 1, y, x + w, y + h, color);
+        renderTooltips(g, rmx, rmy, mx, my);
     }
 
     private void renderHexRow(GuiGraphics g, int mx, int my) {
@@ -161,15 +158,47 @@ public class WikiTextInputScreen extends Screen {
         drawBtn(g, mx, my, insX, rowY - 1, 40, 14, "§7insert", C_BTN);
 
         String hexVal = hexBox.getValue().trim();
-        if (hexVal.startsWith("#") && hexVal.length() == 7) {
-            String hexDigits = hexVal.substring(1);
-
-            if (hexDigits.matches("^[0-9a-fA-F]{6}$")) {
-                int col = (int) Long.parseLong(hexDigits, 16) | 0xFF000000;
-                g.fill(insX + 44, rowY, insX + 58, rowY + 12, col);
-            }
+        if (!hexVal.startsWith("#")) hexVal = "#" + hexVal;
+        if (hexVal.length() == 7 && hexVal.substring(1).matches("^[0-9a-fA-F]{6}$")) {
+            int col = (int) Long.parseLong(hexVal.substring(1), 16) | 0xFF000000;
+            g.fill(insX + 44, rowY, insX + 58, rowY + 12, col);
         }
         g.drawString(font, "§8{#RRGGBB} syntax — no & needed", insX + 60, rowY + 2, C_TEXT_DIM, false);
+    }
+
+    private void renderTooltips(GuiGraphics g, int realMx, int realMy, int mx, int my) {
+        int fBtnW = 18, fGap = 2;
+        int totalW = MD_LABELS.length * (fBtnW + fGap) - fGap;
+        int fStartX = px + pw - 8 - totalW;
+        int fRowY = btnY - 22;
+
+        for (int i = 0; i < MD_LABELS.length; i++) {
+            int bx = fStartX + i * (fBtnW + fGap);
+            if (mx >= bx && mx < bx + fBtnW && my >= fRowY && my < fRowY + 12) {
+                g.renderTooltip(font, Component.literal(MD_TIPS[i]), realMx, realMy);
+                return;
+            }
+        }
+
+        String label = "Colors: ";
+        int boxX = px + 8 + font.width(label);
+        int pickerY = btnY - 22;
+        int size = 11, gap = 2;
+
+        for (int i = 0; i < COLOR_CODES.length; i++) {
+            int cx = boxX + i * (size + gap);
+            if (mx >= cx && mx < cx + size && my >= pickerY && my < pickerY + size) {
+                g.renderTooltip(font, Component.literal("§" + COLOR_CODES[i] + "§" + COLOR_CODES[i]), realMx, realMy);
+                return;
+            }
+        }
+    }
+
+    private static void drawBorder(GuiGraphics g, int x, int y, int w, int h, int color) {
+        g.fill(x, y, x + w, y + 1, color);
+        g.fill(x, y + h - 1, x + w, y + h, color);
+        g.fill(x, y, x + 1, y + h, color);
+        g.fill(x + w - 1, y, x + w, y + h, color);
     }
 
     private void renderFormatButtons(GuiGraphics g, int mx, int my) {
@@ -302,9 +331,9 @@ public class WikiTextInputScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double rmx, double rmy, double delta) {
-        if (inputBox.scrollBy(delta)) return true;
-        return super.mouseScrolled(rmx / uiScale, rmy / uiScale, delta);
+    public boolean mouseScrolled(double rmx, double rmy, double horizontalAmount, double verticalAmount) {
+        if (inputBox.scrollBy(verticalAmount)) return true;
+        return super.mouseScrolled(rmx / uiScale, rmy / uiScale, horizontalAmount, verticalAmount);
     }
 
     @Override
