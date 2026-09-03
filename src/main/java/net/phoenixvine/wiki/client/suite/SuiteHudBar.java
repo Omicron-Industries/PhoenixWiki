@@ -48,6 +48,11 @@ public final class SuiteHudBar {
 
     private static final List<Entry> ENTRIES = new ArrayList<>();
 
+    // FML dispatches each mod's clientSetup event on its own thread (a ForkJoinPool worker), and every
+    // mod calls register() from there -- without this lock, concurrent register() calls race on ENTRIES
+    // (e.g. one thread's sort() sees another thread's in-progress add()) and throw ConcurrentModificationException.
+    private static final Object LOCK = new Object();
+
     public static void register(String modId, int priority, ResourceLocation icon, Component tooltip,
                                 Runnable onClick) {
         register(modId, priority, icon, () -> tooltip, () -> 1, onClick);
@@ -61,19 +66,26 @@ public final class SuiteHudBar {
     public static void register(String modId, int priority, ResourceLocation icon, Supplier<Component> tooltip,
                                 IntSupplier slotCount, Runnable onClick, int texWidth, int texHeight,
                                 boolean tintToTheme) {
-        ENTRIES.removeIf(e -> e.modId().equals(modId));
-        ENTRIES.add(new Entry(modId, priority, icon, tooltip, slotCount, onClick, texWidth, texHeight, tintToTheme));
-        ENTRIES.sort(Comparator.comparingInt(Entry::priority));
+        synchronized (LOCK) {
+            ENTRIES.removeIf(e -> e.modId().equals(modId));
+            ENTRIES.add(
+                    new Entry(modId, priority, icon, tooltip, slotCount, onClick, texWidth, texHeight, tintToTheme));
+            ENTRIES.sort(Comparator.comparingInt(Entry::priority));
+        }
     }
 
     public static void unregister(String modId) {
-        ENTRIES.removeIf(e -> e.modId().equals(modId));
+        synchronized (LOCK) {
+            ENTRIES.removeIf(e -> e.modId().equals(modId));
+        }
     }
 
     private static int totalSlotCount() {
-        int count = 0;
-        for (Entry e : ENTRIES) count += Math.max(0, e.slotCount().getAsInt());
-        return count;
+        synchronized (LOCK) {
+            int count = 0;
+            for (Entry e : ENTRIES) count += Math.max(0, e.slotCount().getAsInt());
+            return count;
+        }
     }
 
     public static int barWidth() {
@@ -109,16 +121,18 @@ public final class SuiteHudBar {
     }
 
     private static Entry entryAt(double mx, double my) {
-        int idx = 0;
-        for (Entry e : ENTRIES) {
-            int slots = Math.max(0, e.slotCount().getAsInt());
-            for (int i = 0; i < slots; i++) {
-                int x = slotX(idx), y = slotY(idx);
-                if (mx >= x && mx < x + BTN_SIZE && my >= y && my < y + BTN_SIZE) return e;
-                idx++;
+        synchronized (LOCK) {
+            int idx = 0;
+            for (Entry e : ENTRIES) {
+                int slots = Math.max(0, e.slotCount().getAsInt());
+                for (int i = 0; i < slots; i++) {
+                    int x = slotX(idx), y = slotY(idx);
+                    if (mx >= x && mx < x + BTN_SIZE && my >= y && my < y + BTN_SIZE) return e;
+                    idx++;
+                }
             }
+            return null;
         }
-        return null;
     }
 
     private static void draw(GuiGraphics g, Minecraft mc, double hoverMx, double hoverMy) {
@@ -128,20 +142,23 @@ public final class SuiteHudBar {
 
         int idx = 0;
         Entry hoveredEntry = null;
-        for (Entry e : ENTRIES) {
-            int slots = Math.max(0, e.slotCount().getAsInt());
-            for (int i = 0; i < slots; i++) {
-                int x = slotX(idx), y = slotY(idx);
-                boolean hovered = hoverMx >= x && hoverMx < x + BTN_SIZE && hoverMy >= y && hoverMy < y + BTN_SIZE;
-                if (hovered) hoveredEntry = e;
+        synchronized (LOCK) {
+            for (Entry e : ENTRIES) {
+                int slots = Math.max(0, e.slotCount().getAsInt());
+                for (int i = 0; i < slots; i++) {
+                    int x = slotX(idx), y = slotY(idx);
+                    boolean hovered =
+                            hoverMx >= x && hoverMx < x + BTN_SIZE && hoverMy >= y && hoverMy < y + BTN_SIZE;
+                    if (hovered) hoveredEntry = e;
 
-                g.fill(x, y, x + BTN_SIZE, y + BTN_SIZE, hovered ? border : panel);
-                g.fill(x, y, x + BTN_SIZE, y + 1, border);
-                g.fill(x, y, x + 1, y + BTN_SIZE, border);
-                g.fill(x + BTN_SIZE - 1, y, x + BTN_SIZE, y + BTN_SIZE, border);
-                g.fill(x, y + BTN_SIZE - 1, x + BTN_SIZE, y + BTN_SIZE, border);
-                drawIcon(g, e, x, y, t);
-                idx++;
+                    g.fill(x, y, x + BTN_SIZE, y + BTN_SIZE, hovered ? border : panel);
+                    g.fill(x, y, x + BTN_SIZE, y + 1, border);
+                    g.fill(x, y, x + 1, y + BTN_SIZE, border);
+                    g.fill(x + BTN_SIZE - 1, y, x + BTN_SIZE, y + BTN_SIZE, border);
+                    g.fill(x, y + BTN_SIZE - 1, x + BTN_SIZE, y + BTN_SIZE, border);
+                    drawIcon(g, e, x, y, t);
+                    idx++;
+                }
             }
         }
 
@@ -167,10 +184,16 @@ public final class SuiteHudBar {
         }
     }
 
+    private static boolean entriesEmpty() {
+        synchronized (LOCK) {
+            return ENTRIES.isEmpty();
+        }
+    }
+
     @SubscribeEvent
     public static void onScreenRender(ScreenEvent.Render.Post event) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || ENTRIES.isEmpty() || !screenWantsBar(event.getScreen())) return;
+        if (mc.player == null || entriesEmpty() || !screenWantsBar(event.getScreen())) return;
         draw(event.getGuiGraphics(), mc, event.getMouseX(), event.getMouseY());
     }
 
@@ -179,7 +202,7 @@ public final class SuiteHudBar {
         if (event.getButton() != 0) return;
         Minecraft mc = Minecraft.getInstance();
         Screen screen = event.getScreen();
-        if (mc.player == null || ENTRIES.isEmpty() || !screenWantsBar(screen)) return;
+        if (mc.player == null || entriesEmpty() || !screenWantsBar(screen)) return;
 
         Entry hit = entryAt(event.getMouseX(), event.getMouseY());
         if (hit == null) return;
