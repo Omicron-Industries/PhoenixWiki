@@ -236,9 +236,9 @@ public final class WikiRichTextRenderer {
             String glyph = checked ? "☑" : "☐";
             if (curY[0] >= clipTop && curY[0] + 8 <= clipBot) {
                 g.drawString(font, glyph, x, curY[0], checked ? 0xFF6FCF6F : 0xFFAAAAAA, false);
+                regions.add(new RichSpan.Region(x, curY[0], x + cl.indent(), curY[0] + 10,
+                        new RichSpan.ChecklistToggle(cl.checkKey(), cl.checkedDefault())));
             }
-            regions.add(new RichSpan.Region(x, curY[0], x + cl.indent(), curY[0] + 10,
-                    new RichSpan.ChecklistToggle(cl.checkKey(), cl.checkedDefault())));
             List<RichSpan> spans = checked ? withStrikethroughStyle(cl.spans()) : cl.spans();
             renderSpanList(g, font, spans, x + cl.indent(), curY, x + cl.indent(),
                     maxW - cl.indent(), clipTop, clipBot, regions, scale);
@@ -330,8 +330,10 @@ public final class WikiRichTextRenderer {
         withArrow.addAll(s.headingSpans());
         renderHeadingLike(g, font, s.level(), withArrow, x, curY, maxW, clipTop, clipBot, regions, scale,
                 accentColor);
-        regions.add(new RichSpan.Region(x, headY, x + maxW, curY[0],
-                new RichSpan.DetailsToggle(collapseTrackingKey(s.collapseKey()))));
+        if (curY[0] >= clipTop && headY <= clipBot) {
+            regions.add(new RichSpan.Region(x, headY, x + maxW, curY[0],
+                    new RichSpan.DetailsToggle(collapseTrackingKey(s.collapseKey()))));
+        }
         if (!collapsed) {
             curY[0] = renderBlockList(g, font, s.children(), x, curY[0], maxW, clipTop, clipBot, regions, scale,
                     accentColor, expandedKeys);
@@ -348,8 +350,8 @@ public final class WikiRichTextRenderer {
         if (y >= clipTop && y - headH <= clipBot) {
             g.fill(x, y, x + maxW, y + headH, 0xFF16121C);
             g.drawString(font, (expanded ? "§f▾ " : "§7▸ ") + "§l" + d.title(), x + 4, y + 3, 0xFFE0D8F0, false);
+            regions.add(new RichSpan.Region(x, y, x + maxW, y + headH, new RichSpan.DetailsToggle(d.expandKey())));
         }
-        regions.add(new RichSpan.Region(x, y, x + maxW, y + headH, new RichSpan.DetailsToggle(d.expandKey())));
         int curY = y + headH + (expanded ? 3 : 0);
 
         if (expanded) {
@@ -604,30 +606,15 @@ public final class WikiRichTextRenderer {
                         g.drawString(font, tok.text(), cx, ly, tok.color(), false);
                         if (tok.interactive() != null) {
                             g.fill(cx, ly + 9, cx + tokW, ly + 10, tok.color());
+                            regions.add(new RichSpan.Region(cx, ly, cx + tokW, ly + lineH, tok.interactive()));
                         }
                     }
-                    if (tok.interactive() != null) {
-                        regions.add(new RichSpan.Region(cx, ly, cx + tokW, ly + lineH, tok.interactive()));
-                    }
                     cx += tokW;
                 }
             }
-        } else {
-
-            for (int li = 0; li < visualLines.size(); li++) {
-                int ly = y + 3 + li * lineH;
-                int cx = x + 4;
-                for (HToken tok : visualLines.get(li)) {
-                    int tokW = font.width(tok.text());
-                    if (tok.interactive() != null) {
-                        regions.add(new RichSpan.Region(cx, ly, cx + tokW, ly + lineH, tok.interactive()));
-                    }
-                    cx += tokW;
-                }
-            }
+            regions.add(new RichSpan.Region(x + maxW - btnW - 2, y + 1, x + maxW - 2, y + 1 + font.lineHeight + 2,
+                    new RichSpan.CodeCopy(code)));
         }
-        regions.add(new RichSpan.Region(x + maxW - btnW - 2, y + 1, x + maxW - 2, y + 1 + font.lineHeight + 2,
-                new RichSpan.CodeCopy(code)));
         return y + boxH;
     }
 
@@ -836,10 +823,11 @@ public final class WikiRichTextRenderer {
                     curX = originX;
                     curY[0] += lineH;
                 }
-                if (curY[0] >= clipTop && curY[0] + img.h() <= clipBot)
+                if (curY[0] >= clipTop && curY[0] + img.h() <= clipBot) {
                     g.blit(imageResolver.apply(img.texture()),
                             curX, curY[0], 0, 0, img.w(), img.h(), img.w(), img.h());
-                regions.add(new RichSpan.Region(curX, curY[0], curX + img.w(), curY[0] + img.h(), img));
+                    regions.add(new RichSpan.Region(curX, curY[0], curX + img.w(), curY[0] + img.h(), img));
+                }
                 curY[0] += img.h() + 2;
                 curX = originX;
             } else if (span instanceof RichSpan.ItemIcon icon) {
@@ -855,8 +843,8 @@ public final class WikiRichTextRenderer {
                             g.renderItem(new ItemStack(item), curX, iconY);
                         } catch (Exception ignored) {}
                     }
+                    regions.add(new RichSpan.Region(curX, iconY, curX + 16, iconY + 16, icon));
                 }
-                regions.add(new RichSpan.Region(curX, iconY, curX + 16, iconY + 16, icon));
                 curX += 18;
             } else if (span instanceof RichSpan.Text t) {
                 int[] pos = renderWords(g, font, t.text(), t.style(), 0xFFFFFFFF,
@@ -950,8 +938,8 @@ public final class WikiRichTextRenderer {
             for (String token : tokens) {
                 if (token.isBlank() && curX == originX) continue;
                 Style newStyle = applyLegacyCodes(running, token);
-                int tokW = Math.round(font.width(Component.literal(token).withStyle(newStyle)) *
-                        boldScale(scale, newStyle.isBold()));
+                float tokScale = boldScale(scale, newStyle.isBold());
+                int tokW = Math.round(font.width(Component.literal(token).withStyle(newStyle)) * tokScale);
                 if (curX + tokW > originX + maxW && curX > originX) {
                     flushRun(g, font, run, runStyle, fallbackColor, runStartX, curY, clipTop, clipBot,
                             boldScale(scale, runStyle.isBold()), background);
@@ -967,9 +955,31 @@ public final class WikiRichTextRenderer {
                 }
                 running = newStyle;
                 runStyle = newStyle;
+
+                if (tokW > maxW) {
+
+                    for (int ci = 0; ci < token.length(); ci++) {
+                        char ch = token.charAt(ci);
+                        int chW = Math.round(font.width(String.valueOf(ch)) * tokScale);
+                        if (curX + chW > originX + maxW && curX > originX) {
+                            flushRun(g, font, run, runStyle, fallbackColor, runStartX, curY, clipTop, clipBot,
+                                    boldScale(scale, runStyle.isBold()), background);
+                            curX = originX;
+                            curY += lineH;
+                            runStartX = curX;
+                        }
+                        run.append(ch);
+                        if (interactive && curY >= clipTop && curY + lineH <= clipBot) {
+                            regions.add(new RichSpan.Region(curX, curY, curX + chW, curY + lineH, regionPayload));
+                        }
+                        curX += chW;
+                    }
+                    continue;
+                }
+
                 run.append(token);
 
-                if (interactive && !token.isBlank()) {
+                if (interactive && !token.isBlank() && curY >= clipTop && curY + lineH <= clipBot) {
                     regions.add(new RichSpan.Region(curX, curY, curX + tokW, curY + lineH, regionPayload));
                 }
                 curX += tokW;
@@ -1017,11 +1027,23 @@ public final class WikiRichTextRenderer {
             for (String token : tokenize(lines[li])) {
                 if (token.isBlank() && curX == originX) continue;
                 running = applyLegacyCodes(running, token);
-                int tokW = Math.round(font.width(Component.literal(token).withStyle(running)) *
-                        boldScale(scale, running.isBold()));
+                float tokScale = boldScale(scale, running.isBold());
+                int tokW = Math.round(font.width(Component.literal(token).withStyle(running)) * tokScale);
                 if (curX + tokW > originX + maxW && curX > originX) {
                     curX = originX;
                     curY += lineH;
+                }
+                if (tokW > maxW) {
+
+                    for (int ci = 0; ci < token.length(); ci++) {
+                        int chW = Math.round(font.width(String.valueOf(token.charAt(ci))) * tokScale);
+                        if (curX + chW > originX + maxW && curX > originX) {
+                            curX = originX;
+                            curY += lineH;
+                        }
+                        curX += chW;
+                    }
+                    continue;
                 }
                 curX += tokW;
             }

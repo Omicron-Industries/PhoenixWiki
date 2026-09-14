@@ -21,6 +21,10 @@ sourceSets {
 repositories {
     mavenLocal()
     mavenCentral()
+    maven {
+        name = "Repsy"
+        url = uri("https://repo.repsy.io/mvn/user75142941/phoenixsuite")
+    }
     flatDir {
         dir 'libs'
     }
@@ -96,6 +100,29 @@ tasks.named('jar', Jar).configure { finalizedBy 'reobfJar' }
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
     options.release.set(17)
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            groupId = project.group
+            artifactId = base.archivesName.get()
+            version = project.version
+            artifact(tasks.named('jar').flatMap { it.archiveFile }) {
+                builtBy tasks.named('reobfJar')
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "Repsy"
+            url = uri("https://repo.repsy.io/mvn/user75142941/phoenixsuite")
+            credentials {
+                username = project.findProperty("repsyUsername") ?: System.getenv("REPSY_USERNAME")
+                password = project.findProperty("repsyPassword") ?: System.getenv("REPSY_PASSWORD")
+            }
+        }
+    }
 }
 
 tasks.register('publishToChronicles', Copy) {
@@ -174,3 +201,17 @@ tasks.register('publishToCore', Copy) {
     }
     into '../PhoenixCore/libs'
 }
+
+tasks.register('publishToPhantasia', Copy) {
+    group = 'phoenix'
+    description = 'Builds this mod and copies the jar into ../Phantasia/libs, so Phantasia picks up local changes.'
+    dependsOn 'reobfJar'
+    from(layout.buildDirectory.dir('libs')) {
+        include '*.jar'
+        exclude '*-sources.jar'
+    }
+    into '../Phantasia/libs'
+}
+
+// (Archive now consumes this via mavenLocal() + modImplementation -- see the publishing{} block
+// above -- instead of a publishToArchive Copy task into a flatDir libs/ folder.)

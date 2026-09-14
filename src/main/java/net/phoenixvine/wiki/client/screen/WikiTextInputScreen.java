@@ -102,6 +102,7 @@ public class WikiTextInputScreen extends Screen {
 
         inputBox = addRenderableWidget(new MultilineTextArea(font, px + 8, py + 26, pw - 16, ph - 86, maxLength));
         inputBox.setValue(initial);
+        inputBox.seekToStart();
         setInitialFocus(inputBox);
 
         int hexY = btnY - 36;

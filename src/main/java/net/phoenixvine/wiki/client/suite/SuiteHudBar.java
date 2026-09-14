@@ -35,6 +35,8 @@ public final class SuiteHudBar {
     public static final int PRIORITY_CHRONICLES = 30;
     public static final int PRIORITY_GUILDS = 40;
     public static final int PRIORITY_EXCAVATE = 50;
+    public static final int PRIORITY_ARCHIVE = 60;
+    public static final int PRIORITY_PHANTASIA = 70;
 
     private static final int BTN_SIZE = 20;
     private static final int GAP = 2;
@@ -47,9 +49,6 @@ public final class SuiteHudBar {
 
     private static final List<Entry> ENTRIES = new ArrayList<>();
 
-    // FML dispatches each mod's clientSetup event on its own thread (a ForkJoinPool worker), and every
-    // mod calls register() from there -- without this lock, concurrent register() calls race on ENTRIES
-    // (e.g. one thread's sort() sees another thread's in-progress add()) and throw ConcurrentModificationException.
     private static final Object LOCK = new Object();
 
     public static void register(String modId, int priority, ResourceLocation icon, Component tooltip,
@@ -79,22 +78,102 @@ public final class SuiteHudBar {
         }
     }
 
-    private static int totalSlotCount() {
+    public static net.minecraft.network.chat.Component getTooltip(String modId) {
         synchronized (LOCK) {
-            int count = 0;
-            for (Entry e : ENTRIES) count += Math.max(0, e.slotCount().getAsInt());
-            return count;
+            return ENTRIES.stream().filter(e -> e.modId().equals(modId))
+                    .findFirst().map(e -> e.tooltip().get()).orElse(null);
+        }
+    }
+
+    public static java.util.List<String> getRegisteredModIds() {
+        synchronized (LOCK) {
+            return ENTRIES.stream().map(Entry::modId).toList();
+        }
+    }
+
+    public static boolean isButtonEnabled(String modId) { return SuiteHudConfig.isEnabled(modId); }
+
+    public static void setButtonEnabled(String modId, boolean enabled) { SuiteHudConfig.setEnabled(modId, enabled); }
+
+    private record HudSlot(Entry entry, boolean isSettings, int x, int y, int size) {}
+
+    private static int sizeFor(String modId) {
+        return Math.round(BTN_SIZE * SuiteHudConfig.getEffectiveScale(modId));
+    }
+
+    private static List<HudSlot> computeLayout() {
+        synchronized (LOCK) {
+            List<String> ids = new ArrayList<>();
+            List<Entry> owners = new ArrayList<>();
+            List<Integer> sizes = new ArrayList<>();
+            for (Entry e : ENTRIES) {
+                if (!SuiteHudConfig.isEnabled(e.modId())) continue;
+                int size = sizeFor(e.modId());
+                int count = Math.max(0, e.slotCount().getAsInt());
+                for (int i = 0; i < count; i++) {
+                    ids.add(e.modId());
+                    owners.add(e);
+                    sizes.add(size);
+                }
+            }
+
+            boolean showSettings = !ENTRIES.isEmpty();
+            if (showSettings) {
+                owners.add(null);
+                sizes.add(sizeFor(SETTINGS_ID));
+            }
+
+            int n = sizes.size();
+            List<HudSlot> slots = new ArrayList<>(n);
+            if (n == 0) return slots;
+
+            int cols = (n + GRID_ROWS - 1) / GRID_ROWS;
+            int rows = Math.min(GRID_ROWS, n);
+            int[] colW = new int[cols];
+            int[] rowH = new int[rows];
+            for (int idx = 0; idx < n; idx++) {
+                int col = idx / GRID_ROWS, row = idx % GRID_ROWS;
+                colW[col] = Math.max(colW[col], sizes.get(idx));
+                rowH[row] = Math.max(rowH[row], sizes.get(idx));
+            }
+
+            int[] colX = new int[cols];
+            int cx = MARGIN;
+            for (int c = 0; c < cols; c++) {
+                colX[c] = cx;
+                cx += colW[c] + GAP;
+            }
+            int[] rowY = new int[rows];
+            int cy = MARGIN;
+            for (int r = 0; r < rows; r++) {
+                rowY[r] = cy;
+                cy += rowH[r] + GAP;
+            }
+
+            for (int idx = 0; idx < n; idx++) {
+                int col = idx / GRID_ROWS, row = idx % GRID_ROWS;
+                int size = sizes.get(idx);
+                int x = colX[col] + (colW[col] - size) / 2;
+                int y = rowY[row] + (rowH[row] - size) / 2;
+                Entry owner = owners.get(idx);
+                slots.add(new HudSlot(owner, owner == null, x, y, size));
+            }
+            return slots;
         }
     }
 
     public static int barWidth() {
-        int cols = Math.max(1, (int) Math.ceil(totalSlotCount() / (double) GRID_ROWS));
-        return MARGIN * 2 + cols * BTN_SIZE + (cols - 1) * GAP;
+        List<HudSlot> slots = computeLayout();
+        int maxRight = 0;
+        for (HudSlot s : slots) maxRight = Math.max(maxRight, s.x() + s.size());
+        return slots.isEmpty() ? 0 : maxRight + MARGIN;
     }
 
     public static int barHeight() {
-        int rows = Math.min(GRID_ROWS, Math.max(1, totalSlotCount()));
-        return MARGIN * 2 + rows * BTN_SIZE + (rows - 1) * GAP;
+        List<HudSlot> slots = computeLayout();
+        int maxBottom = 0;
+        for (HudSlot s : slots) maxBottom = Math.max(maxBottom, s.y() + s.size());
+        return slots.isEmpty() ? 0 : maxBottom + MARGIN;
     }
 
     public static boolean screenWantsBar(Screen screen) {
@@ -111,27 +190,11 @@ public final class SuiteHudBar {
         return false;
     }
 
-    private static int slotX(int slotIndex) {
-        return MARGIN + (slotIndex / GRID_ROWS) * (BTN_SIZE + GAP);
-    }
-
-    private static int slotY(int slotIndex) {
-        return MARGIN + (slotIndex % GRID_ROWS) * (BTN_SIZE + GAP);
-    }
-
-    private static Entry entryAt(double mx, double my) {
-        synchronized (LOCK) {
-            int idx = 0;
-            for (Entry e : ENTRIES) {
-                int slots = Math.max(0, e.slotCount().getAsInt());
-                for (int i = 0; i < slots; i++) {
-                    int x = slotX(idx), y = slotY(idx);
-                    if (mx >= x && mx < x + BTN_SIZE && my >= y && my < y + BTN_SIZE) return e;
-                    idx++;
-                }
-            }
-            return null;
+    private static HudSlot slotAt(List<HudSlot> slots, double mx, double my) {
+        for (HudSlot s : slots) {
+            if (mx >= s.x() && mx < s.x() + s.size() && my >= s.y() && my < s.y() + s.size()) return s;
         }
+        return null;
     }
 
     private static void draw(GuiGraphics g, Minecraft mc, double hoverMx, double hoverMy) {
@@ -139,36 +202,42 @@ public final class SuiteHudBar {
         int panel = t.panel.getColor();
         int border = t.accent.getColor();
 
-        int idx = 0;
-        Entry hoveredEntry = null;
-        synchronized (LOCK) {
-            for (Entry e : ENTRIES) {
-                int slots = Math.max(0, e.slotCount().getAsInt());
-                for (int i = 0; i < slots; i++) {
-                    int x = slotX(idx), y = slotY(idx);
-                    boolean hovered =
-                            hoverMx >= x && hoverMx < x + BTN_SIZE && hoverMy >= y && hoverMy < y + BTN_SIZE;
-                    if (hovered) hoveredEntry = e;
+        List<HudSlot> slots = computeLayout();
+        HudSlot hovered = slotAt(slots, hoverMx, hoverMy);
 
-                    g.fill(x, y, x + BTN_SIZE, y + BTN_SIZE, hovered ? border : panel);
-                    g.fill(x, y, x + BTN_SIZE, y + 1, border);
-                    g.fill(x, y, x + 1, y + BTN_SIZE, border);
-                    g.fill(x + BTN_SIZE - 1, y, x + BTN_SIZE, y + BTN_SIZE, border);
-                    g.fill(x, y + BTN_SIZE - 1, x + BTN_SIZE, y + BTN_SIZE, border);
-                    drawIcon(g, e, x, y, t);
-                    idx++;
-                }
+        for (HudSlot s : slots) {
+            boolean isHovered = s == hovered;
+            int x = s.x(), y = s.y(), size = s.size();
+            g.fill(x, y, x + size, y + size, isHovered ? border : panel);
+            g.fill(x, y, x + size, y + 1, border);
+            g.fill(x, y, x + 1, y + size, border);
+            g.fill(x + size - 1, y, x + size, y + size, border);
+            g.fill(x, y + size - 1, x + size, y + size, border);
+            if (s.isSettings()) {
+                drawSettingsIcon(g, x, y, size, t);
+            } else {
+                drawIcon(g, s.entry(), x, y, size, t);
             }
         }
 
-        if (hoveredEntry != null) {
-            g.renderTooltip(mc.font, hoveredEntry.tooltip().get(), (int) hoverMx, (int) hoverMy);
+        if (hovered != null) {
+            List<Component> tip = new ArrayList<>();
+            if (hovered.isSettings()) {
+                tip.add(Component.literal("§fSuite HUD Settings"));
+                tip.add(Component.literal("§7Button scale, and which buttons show"));
+            } else {
+                tip.add(hovered.entry().tooltip().get());
+                tip.add(Component.literal("§7Right-click to hide"));
+            }
+            g.renderComponentTooltip(mc.font, tip, (int) hoverMx, (int) hoverMy);
         }
     }
 
-    private static void drawIcon(GuiGraphics g, Entry e, int x, int y, PhoenixTheme t) {
+    private static void drawIcon(GuiGraphics g, Entry e, int x, int y, int size, PhoenixTheme t) {
+        int pad = Math.max(1, Math.round(size * 0.1f));
+        int iconSize = size - pad * 2;
         if (!e.tintToTheme()) {
-            g.blit(e.icon(), x + 2, y + 2, 0, 0, 16, 16, e.texWidth(), e.texHeight());
+            g.blit(e.icon(), x + pad, y + pad, iconSize, iconSize, 0, 0, 16, 16, e.texWidth(), e.texHeight());
             return;
         }
 
@@ -177,10 +246,22 @@ public final class SuiteHudBar {
         com.mojang.blaze3d.systems.RenderSystem.setShaderColor(((color >> 16) & 0xFF) / 255f,
                 ((color >> 8) & 0xFF) / 255f, (color & 0xFF) / 255f, a > 0f ? a : 1f);
         try {
-            g.blit(e.icon(), x + 2, y + 2, 0, 0, 16, 16, e.texWidth(), e.texHeight());
+            g.blit(e.icon(), x + pad, y + pad, iconSize, iconSize, 0, 0, 16, 16, e.texWidth(), e.texHeight());
         } finally {
             com.mojang.blaze3d.systems.RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         }
+    }
+
+    private static void drawSettingsIcon(GuiGraphics g, int x, int y, int size, PhoenixTheme t) {
+        int color = t.textDim.getColor() | 0xFF000000;
+        int cx = x + size / 2, cy = y + size / 2;
+        int r = Math.max(2, size / 2 - Math.max(2, size / 5));
+        g.fill(cx - r, cy - 1, cx + r, cy + 1, color);
+        g.fill(cx - 1, cy - r, cx + 1, cy + r, color);
+        g.fill(cx - r + 1, cy - r + 1, cx + r - 1, cy - r + 2, color);
+        g.fill(cx - r + 1, cy + r - 2, cx + r - 1, cy + r - 1, color);
+        int inner = Math.max(1, r / 2);
+        g.fill(cx - inner, cy - inner, cx + inner, cy + inner, color);
     }
 
     private static boolean entriesEmpty() {
@@ -188,6 +269,8 @@ public final class SuiteHudBar {
             return ENTRIES.isEmpty();
         }
     }
+
+    private static final String SETTINGS_ID = "__suite_settings__";
 
     @SubscribeEvent
     public static void onScreenRender(ScreenEvent.Render.Post event) {
@@ -198,15 +281,24 @@ public final class SuiteHudBar {
 
     @SubscribeEvent
     public static void onScreenMouseClick(ScreenEvent.MouseButtonPressed.Pre event) {
-        if (event.getButton() != 0) return;
         Minecraft mc = Minecraft.getInstance();
         Screen screen = event.getScreen();
         if (mc.player == null || entriesEmpty() || !screenWantsBar(screen)) return;
 
-        Entry hit = entryAt(event.getMouseX(), event.getMouseY());
+        List<HudSlot> slots = computeLayout();
+        HudSlot hit = slotAt(slots, event.getMouseX(), event.getMouseY());
         if (hit == null) return;
 
         event.setCanceled(true);
-        hit.onClick().run();
+        if (hit.isSettings()) {
+            if (event.getButton() == 0) mc.setScreen(new SuiteHudSettingsScreen(screen));
+            return;
+        }
+        if (event.getButton() == 1) {
+            
+            SuiteHudConfig.setEnabled(hit.entry().modId(), false);
+        } else if (event.getButton() == 0) {
+            hit.entry().onClick().run();
+        }
     }
 }

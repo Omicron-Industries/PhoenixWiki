@@ -601,8 +601,11 @@ public class WikiScreen extends Screen {
                         jumpToPage(l.url().substring(5));
                     } else {
                         try {
-                            java.awt.Desktop.getDesktop().browse(java.net.URI.create(l.url()));
-                        } catch (Exception ignored) {}
+                            net.minecraft.Util.getPlatform().openUri(java.net.URI.create(l.url()));
+                        } catch (Exception e) {
+                            net.phoenixvine.wiki.PhoenixWiki.LOGGER.warn(
+                                    "PhoenixWiki: failed to open link '{}'", l.url(), e);
+                        }
                     }
                     return true;
                 }
