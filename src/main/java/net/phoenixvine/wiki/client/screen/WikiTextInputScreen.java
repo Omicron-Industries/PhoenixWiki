@@ -101,6 +101,7 @@ public class WikiTextInputScreen extends Screen {
         this.btnY = py + ph - 24;
 
         inputBox = addRenderableWidget(new MultilineTextArea(font, px + 8, py + 26, pw - 16, ph - 86, maxLength));
+        inputBox.setUiScale(uiScale);
         inputBox.setValue(initial);
         inputBox.seekToStart();
         setInitialFocus(inputBox);
