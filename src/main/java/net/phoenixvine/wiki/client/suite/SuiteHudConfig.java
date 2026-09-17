@@ -34,6 +34,19 @@ public final class SuiteHudConfig {
 
     private static Data data = null;
 
+    /**
+     * Forces the config to load (and, per {@link #ensureLoaded}, write itself back out) right now
+     * instead of waiting for whichever mod's HUD button happens to render first -- nothing calls
+     * isEnabled()/getEffectiveScale() etc. until a screen with the suite bar actually opens, so
+     * without this the file (and its config/phoenix_wiki/ folder) might never appear at all if the
+     * player never opens an inventory-adjacent screen. Called once from PhoenixWiki's own client setup.
+     */
+    public static void init() {
+        synchronized (LOCK) {
+            ensureLoaded();
+        }
+    }
+
     private static File file() {
         return new File(Minecraft.getInstance().gameDirectory, "config/phoenix_wiki/suite_hud.json");
     }
