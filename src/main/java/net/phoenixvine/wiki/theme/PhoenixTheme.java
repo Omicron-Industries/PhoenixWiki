@@ -208,7 +208,9 @@ public class PhoenixTheme {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    private static final Path THEMES_FILE = FMLPaths.CONFIGDIR.get().resolve("phoenixsuite_theme.json");
+    private static final Path THEMES_FILE = FMLPaths.CONFIGDIR.get().resolve("phoenix_wiki").resolve("theme.json");
+    /** Where this file lived before every PhoenixWiki config got its own subfolder -- see {@link #loadThemes}. */
+    private static final Path LEGACY_THEMES_FILE = FMLPaths.CONFIGDIR.get().resolve("phoenixsuite_theme.json");
 
     public PhoenixTheme() {}
 
@@ -440,9 +442,15 @@ public class PhoenixTheme {
         String loadedActive = "DARK";
         sharedMode = true;
         perModActiveTheme.clear();
+        boolean migratedFromLegacy = false;
         try {
-            if (Files.exists(THEMES_FILE)) {
-                String json = Files.readString(THEMES_FILE);
+            // config/phoenix_wiki/theme.json now, not loose in config/ -- fall back to the old path
+            // once, on a fresh install of this version, so nobody's existing theme/mode gets reset.
+            Path sourceFile = Files.exists(THEMES_FILE) ? THEMES_FILE :
+                    Files.exists(LEGACY_THEMES_FILE) ? LEGACY_THEMES_FILE : null;
+            migratedFromLegacy = sourceFile == LEGACY_THEMES_FILE;
+            if (sourceFile != null) {
+                String json = Files.readString(sourceFile);
                 JsonObject root = GSON.fromJson(json, JsonObject.class);
                 if (root != null) {
                     if (root.has("custom") && root.get("custom").isJsonObject()) {
@@ -468,5 +476,7 @@ public class PhoenixTheme {
 
         activeName = loadedActive;
         active = REGISTRY.getOrDefault(activeName, REGISTRY.get("DARK"));
+
+        if (migratedFromLegacy) saveAll();
     }
 }

@@ -35,6 +35,11 @@ public final class SuiteHudConfig {
     private static Data data = null;
 
     private static File file() {
+        return new File(Minecraft.getInstance().gameDirectory, "config/phoenix_wiki/suite_hud.json");
+    }
+
+    /** Where this file lived before every PhoenixWiki config got its own subfolder -- see {@link #ensureLoaded}. */
+    private static File legacyFile() {
         return new File(Minecraft.getInstance().gameDirectory, "config/phoenix-wiki-suite.json");
     }
 
@@ -42,6 +47,11 @@ public final class SuiteHudConfig {
         if (data != null) return;
         data = new Data();
         File f = file();
+        boolean migratedFromLegacy = false;
+        if (!f.exists() && legacyFile().exists()) {
+            f = legacyFile();
+            migratedFromLegacy = true;
+        }
         if (f.exists()) {
             try (FileReader r = new FileReader(f)) {
                 JsonElement root = JsonParser.parseReader(r);
@@ -60,6 +70,7 @@ public final class SuiteHudConfig {
                 PhoenixWiki.LOGGER.warn("[PhoenixWiki] Failed to load suite config: {}", e.getMessage());
             }
         }
+        if (migratedFromLegacy) save();
     }
 
     private static float clamp(float scale) {
