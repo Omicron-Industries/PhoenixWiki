@@ -66,6 +66,8 @@ public class PhoenixThemeEditorScreen extends Screen {
         return base + amplitude * (float) Math.sin(System.currentTimeMillis() / periodDivisor);
     }
 
+    private final String ownerModId;
+
     public PhoenixThemeEditorScreen(Screen parent) {
         this(parent, "Phoenix Suite");
     }
@@ -74,6 +76,7 @@ public class PhoenixThemeEditorScreen extends Screen {
         super(Component.literal("Theme Editor"));
         this.parent = parent;
         this.previewAppName = previewAppName;
+        this.ownerModId = PhoenixTheme.resolveCallerModId();
     }
 
     @Override
@@ -88,8 +91,8 @@ public class PhoenixThemeEditorScreen extends Screen {
         vw = Math.round(width / uiScale);
         vh = Math.round(height / uiScale);
 
-        PhoenixTheme t = PhoenixTheme.current();
-        String curName = PhoenixTheme.getActiveName();
+        PhoenixTheme t = PhoenixTheme.current(ownerModId);
+        String curName = PhoenixTheme.getActiveName(ownerModId);
 
         syncPalette(t);
 
@@ -141,7 +144,7 @@ public class PhoenixThemeEditorScreen extends Screen {
         addField("Ally", t.ally, sbX, y, boxW);
         y += rh + 6;
 
-        int ctrlY = Math.max(y + 4, vh - 70);
+        int ctrlY = Math.max(y + 4, vh - 92);
         nameInput = new EditBox(font, vw - sbW + 10, ctrlY, sbW - 20, 16, Component.literal("Theme name"));
         nameInput.setValue(curName);
         nameInput.setMaxLength(32);
@@ -177,10 +180,25 @@ public class PhoenixThemeEditorScreen extends Screen {
                     onClose();
                 })
                 .bounds(vw - sbW + 10, ctrlY + 42, sbW - 20, 18).build());
+
+        addRenderableWidget(Button
+                .builder(Component.literal(PhoenixTheme.isSharedMode() ?
+                        "§7Mode: §fShared suite-wide" : "§7Mode: §fPer-mod"),
+                        b -> {
+                            PhoenixTheme.setSharedMode(!PhoenixTheme.isSharedMode());
+                            lastTrackedName = null;
+                            init();
+                        })
+                .bounds(vw - sbW + 10, ctrlY + 64, sbW - 20, 18)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(
+                        "Shared: every Phoenix suite mod uses this one theme.\n" +
+                                "Per-mod: each mod remembers its own -- the theme you set here only\n" +
+                                "applies to whichever mod opened this screen.")))
+                .build());
     }
 
     private void newTheme() {
-        PhoenixTheme.createNewTheme("CUSTOM", PhoenixTheme.current());
+        PhoenixTheme.createNewTheme(ownerModId, "CUSTOM", PhoenixTheme.current(ownerModId));
         confirmActive = false;
         pendingAction = null;
         lastTrackedName = null;
@@ -214,7 +232,7 @@ public class PhoenixThemeEditorScreen extends Screen {
         openPickerField.target().set(hex);
         openPickerField.box().setValue(hex);
         confirmActive = false;
-        syncPalette(PhoenixTheme.current());
+        syncPalette(PhoenixTheme.current(ownerModId));
     }
 
     private void updatePickerSV(double mx, double my, int svX, int svY) {
@@ -236,7 +254,7 @@ public class PhoenixThemeEditorScreen extends Screen {
             if (!isUndoing) pushUndo();
             target.set(v);
             confirmActive = false;
-            syncPalette(PhoenixTheme.current());
+            syncPalette(PhoenixTheme.current(ownerModId));
         });
         addWidget(box);
         fields.add(new FieldEntry(label, target, box));
@@ -283,10 +301,10 @@ public class PhoenixThemeEditorScreen extends Screen {
             status = "§eClick again to discard!";
             statusC = 0xFFFFBB33;
         } else if (hasChanges()) {
-            status = "§7● " + PhoenixTheme.getActiveName() + " (unsaved)";
+            status = "§7● " + PhoenixTheme.getActiveName(ownerModId) + " (unsaved)";
             statusC = 0xFFFFBB33;
         } else {
-            status = "§7○ " + PhoenixTheme.getActiveName();
+            status = "§7○ " + PhoenixTheme.getActiveName(ownerModId);
             statusC = C_DIM;
         }
         g.drawString(font, status, vw - sbW + 8, 19, statusC, false);
@@ -373,7 +391,7 @@ public class PhoenixThemeEditorScreen extends Screen {
     }
 
     private void renderPreview(GuiGraphics g, int mx, int my, int sbW) {
-        PhoenixTheme t = PhoenixTheme.current();
+        PhoenixTheme t = PhoenixTheme.current(ownerModId);
         int canvasW = vw - sbW;
         int mockW = Math.min(canvasW - 20, 360);
         int mockX = 10;
@@ -467,7 +485,7 @@ public class PhoenixThemeEditorScreen extends Screen {
 
         for (int i = scrollOffset; i < vis.size() && listY + itemH <= vh - 4; i++) {
             String name = vis.get(i);
-            boolean sel = name.equals(PhoenixTheme.getActiveName());
+            boolean sel = name.equals(PhoenixTheme.getActiveName(ownerModId));
             boolean hov = mx >= mockX && mx <= mockX + mockW && my >= listY && my < listY + itemH;
 
             int rowBg = sel ? ((t.accent.getColor() & 0x00FFFFFF) | 0x33000000) :
@@ -562,7 +580,7 @@ public class PhoenixThemeEditorScreen extends Screen {
                         }
                         restore(savedSnap);
                     }
-                    PhoenixTheme.setCurrent(name);
+                    PhoenixTheme.setCurrent(ownerModId, name);
                     confirmActive = false;
                     pendingAction = null;
                     lastTrackedName = null;
@@ -634,10 +652,10 @@ public class PhoenixThemeEditorScreen extends Screen {
     private void save() {
         String name = nameInput != null ? nameInput.getValue().trim().toUpperCase(Locale.ROOT) : "";
         if (name.isEmpty()) return;
-        PhoenixTheme copy = PhoenixTheme.current().copy();
+        PhoenixTheme copy = PhoenixTheme.current(ownerModId).copy();
         PhoenixTheme.saveCustomTheme(name, copy);
-        PhoenixTheme.setCurrent(name);
-        savedSnap = makeSnap(PhoenixTheme.current(), name);
+        PhoenixTheme.setCurrent(ownerModId, name);
+        savedSnap = makeSnap(PhoenixTheme.current(ownerModId), name);
         confirmActive = false;
         pendingAction = null;
         lastTrackedName = name;
@@ -645,8 +663,8 @@ public class PhoenixThemeEditorScreen extends Screen {
     }
 
     private void pushUndo() {
-        Snap cur = makeSnap(PhoenixTheme.current(),
-                nameInput != null ? nameInput.getValue() : PhoenixTheme.getActiveName());
+        Snap cur = makeSnap(PhoenixTheme.current(ownerModId),
+                nameInput != null ? nameInput.getValue() : PhoenixTheme.getActiveName(ownerModId));
         if (undoStack.isEmpty() || !undoStack.peek().equals(cur)) {
             undoStack.push(cur);
             if (undoStack.size() > 50) undoStack.remove(0);
@@ -688,8 +706,8 @@ public class PhoenixThemeEditorScreen extends Screen {
 
     private boolean hasChanges() {
         if (savedSnap == null) return false;
-        return !savedSnap.equals(makeSnap(PhoenixTheme.current(),
-                nameInput != null ? nameInput.getValue() : PhoenixTheme.getActiveName()));
+        return !savedSnap.equals(makeSnap(PhoenixTheme.current(ownerModId),
+                nameInput != null ? nameInput.getValue() : PhoenixTheme.getActiveName(ownerModId)));
     }
 
     private Snap makeSnap(PhoenixTheme t, String name) {
@@ -699,7 +717,7 @@ public class PhoenixThemeEditorScreen extends Screen {
     }
 
     private void restore(Snap s) {
-        PhoenixTheme t = PhoenixTheme.current();
+        PhoenixTheme t = PhoenixTheme.current(ownerModId);
         t.bg.set(s.bg());
         t.panel.set(s.panel());
         t.header.set(s.header());

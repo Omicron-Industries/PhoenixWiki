@@ -134,6 +134,49 @@ public class PhoenixTheme {
     private static PhoenixTheme active = null;
     private static String activeName = "DARK";
 
+    private static boolean sharedMode = true;
+
+    private static final Map<String, String> perModActiveTheme = new LinkedHashMap<>();
+
+    private static final Map<String, String> MOD_PACKAGES = new LinkedHashMap<>();
+
+    private static final String OWN_PACKAGE = "net.phoenixvine.wiki";
+
+    public static void registerMod(String packagePrefix, String modId) {
+        MOD_PACKAGES.put(packagePrefix, modId);
+    }
+
+    static String resolveCallerModId() {
+        if (MOD_PACKAGES.isEmpty()) return null;
+        String callerClass = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE)
+                .walk(frames -> frames
+                        .map(f -> f.getClassName())
+                        .filter(n -> !n.startsWith(OWN_PACKAGE))
+                        .findFirst())
+                .orElse(null);
+        if (callerClass == null) return null;
+
+        String best = null;
+        for (String prefix : MOD_PACKAGES.keySet()) {
+            if (callerClass.startsWith(prefix) && (best == null || prefix.length() > best.length())) {
+                best = prefix;
+            }
+        }
+        return best != null ? MOD_PACKAGES.get(best) : null;
+    }
+
+    public static boolean isSharedMode() {
+        if (REGISTRY.isEmpty()) loadThemes();
+        return sharedMode;
+    }
+
+    public static void setSharedMode(boolean shared) {
+        if (REGISTRY.isEmpty()) loadThemes();
+        sharedMode = shared;
+        saveAll();
+        fireChangeListeners();
+    }
+
     private static final java.util.List<Runnable> CHANGE_LISTENERS = new java.util.ArrayList<>();
 
     public static void addChangeListener(Runnable listener) {
@@ -215,13 +258,27 @@ public class PhoenixTheme {
     }
 
     public static PhoenixTheme current() {
+        return current(resolveCallerModId());
+    }
+
+    public static PhoenixTheme current(String modId) {
         if (REGISTRY.isEmpty()) loadThemes();
-        return active != null ? active : REGISTRY.get("DARK");
+        PhoenixTheme fallback = active != null ? active : REGISTRY.get("DARK");
+        if (sharedMode || modId == null) return fallback;
+        String name = perModActiveTheme.get(modId);
+        if (name == null) return fallback;
+        PhoenixTheme t = REGISTRY.get(name);
+        return t != null ? t : fallback;
     }
 
     public static String getActiveName() {
+        return getActiveName(resolveCallerModId());
+    }
+
+    public static String getActiveName(String modId) {
         if (REGISTRY.isEmpty()) loadThemes();
-        return activeName;
+        if (sharedMode || modId == null) return activeName;
+        return perModActiveTheme.getOrDefault(modId, activeName);
     }
 
     public static boolean isBuiltin(String name) {
@@ -229,15 +286,23 @@ public class PhoenixTheme {
     }
 
     public static void setCurrent(String name) {
+        setCurrent(resolveCallerModId(), name);
+    }
+
+    public static void setCurrent(String modId, String name) {
+        if (REGISTRY.isEmpty()) loadThemes();
         PhoenixTheme t = REGISTRY.get(name);
         if (t == null) t = REGISTRY.get(name.toUpperCase(Locale.ROOT));
-        if (t != null) {
+        if (t == null) return;
+
+        if (sharedMode || modId == null) {
             active = t;
             activeName = name;
-
-            saveAll();
-            fireChangeListeners();
+        } else {
+            perModActiveTheme.put(modId, name);
         }
+        saveAll();
+        fireChangeListeners();
     }
 
     public static void saveCustomTheme(String name, PhoenixTheme theme) {
@@ -248,6 +313,10 @@ public class PhoenixTheme {
     }
 
     public static String createNewTheme(String baseName, PhoenixTheme source) {
+        return createNewTheme(resolveCallerModId(), baseName, source);
+    }
+
+    public static String createNewTheme(String modId, String baseName, PhoenixTheme source) {
         if (REGISTRY.isEmpty()) loadThemes();
         String candidate = baseName;
         int n = 2;
@@ -256,7 +325,7 @@ public class PhoenixTheme {
             n++;
         }
         saveCustomTheme(candidate, source.copy());
-        setCurrent(candidate);
+        setCurrent(modId, candidate);
         return candidate;
     }
 
@@ -267,6 +336,8 @@ public class PhoenixTheme {
             activeName = "DARK";
             active = REGISTRY.get("DARK");
         }
+
+        perModActiveTheme.values().removeIf(name::equals);
         saveAll();
         fireChangeListeners();
         return true;
@@ -308,6 +379,10 @@ public class PhoenixTheme {
             Files.createDirectories(THEMES_FILE.getParent());
             JsonObject root = new JsonObject();
             root.addProperty("active", activeName);
+            root.addProperty("sharedMode", sharedMode);
+            JsonObject perModObj = new JsonObject();
+            for (Map.Entry<String, String> e : perModActiveTheme.entrySet()) perModObj.addProperty(e.getKey(), e.getValue());
+            root.add("perMod", perModObj);
             JsonObject customObj = new JsonObject();
             for (Map.Entry<String, PhoenixTheme> e : REGISTRY.entrySet()) {
                 if (!isBuiltin(e.getKey())) customObj.add(e.getKey(), themeToJson(e.getValue()));
@@ -363,6 +438,8 @@ public class PhoenixTheme {
                 "FFF0E0D0", "FFA07860", "FF604838", "FF44CC77", "MAGMA", "FF705040", "FF4499CC"));
 
         String loadedActive = "DARK";
+        sharedMode = true;
+        perModActiveTheme.clear();
         try {
             if (Files.exists(THEMES_FILE)) {
                 String json = Files.readString(THEMES_FILE);
@@ -376,6 +453,13 @@ public class PhoenixTheme {
                         }
                     }
                     if (root.has("active")) loadedActive = root.get("active").getAsString();
+                    if (root.has("sharedMode")) sharedMode = root.get("sharedMode").getAsBoolean();
+                    if (root.has("perMod") && root.get("perMod").isJsonObject()) {
+                        for (Map.Entry<String, com.google.gson.JsonElement> e : root.getAsJsonObject("perMod")
+                                .entrySet()) {
+                            perModActiveTheme.put(e.getKey(), e.getValue().getAsString());
+                        }
+                    }
                 }
             }
         } catch (Exception e) {

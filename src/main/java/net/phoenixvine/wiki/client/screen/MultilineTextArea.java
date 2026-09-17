@@ -36,15 +36,6 @@ public class MultilineTextArea extends AbstractWidget {
     private int lastCursorForScroll = -1;
     private Consumer<String> responder;
 
-    /**
-     * The pose-stack scale the owning screen is currently rendering this widget under (see
-     * WikiTextInputScreen, which uniformly scales its whole panel down to fit small windows). Needed
-     * because {@link GuiGraphics#enableScissor} clips in real screen pixels regardless of the active
-     * pose matrix -- passing this widget's own logical x/y/width/height straight into it (as if scale
-     * were always 1) clips at the UNscaled position while the actual glyphs render at the SCALED
-     * (smaller) position, cutting off however many real pixels the two disagree by from the left edge
-     * of every line. Defaults to 1 (no-op) for any caller that never sets it.
-     */
     private float uiScale = 1f;
 
     public void setUiScale(float scale) {
@@ -204,9 +195,6 @@ public class MultilineTextArea extends AbstractWidget {
 
         updateHoverWord(mx, my, textX, textY, disp);
 
-        // enableScissor clips in real screen pixels, not through the pose matrix -- convert this
-        // widget's logical bounds to real pixels ourselves so the clip lines up with where the
-        // (possibly scaled-down) text actually renders. See uiScale's javadoc.
         g.enableScissor(Math.round(getX() * uiScale), Math.round(getY() * uiScale),
                 Math.round((getX() + width) * uiScale), Math.round((getY() + height) * uiScale));
 
