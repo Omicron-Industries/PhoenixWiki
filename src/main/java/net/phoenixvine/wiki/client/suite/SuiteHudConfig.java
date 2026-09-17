@@ -47,10 +47,8 @@ public final class SuiteHudConfig {
         if (data != null) return;
         data = new Data();
         File f = file();
-        boolean migratedFromLegacy = false;
         if (!f.exists() && legacyFile().exists()) {
             f = legacyFile();
-            migratedFromLegacy = true;
         }
         if (f.exists()) {
             try (FileReader r = new FileReader(f)) {
@@ -70,7 +68,10 @@ public final class SuiteHudConfig {
                 PhoenixWiki.LOGGER.warn("[PhoenixWiki] Failed to load suite config: {}", e.getMessage());
             }
         }
-        if (migratedFromLegacy) save();
+        // Always write back, not just when migrating from the old path -- otherwise a totally fresh
+        // install (no file either old or new) never creates config/phoenix_wiki/ at all until the
+        // player happens to change a HUD setting, unlike every other mod's config showing up on first load.
+        save();
     }
 
     private static float clamp(float scale) {

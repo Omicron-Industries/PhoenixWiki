@@ -442,13 +442,11 @@ public class PhoenixTheme {
         String loadedActive = "DARK";
         sharedMode = true;
         perModActiveTheme.clear();
-        boolean migratedFromLegacy = false;
         try {
             // config/phoenix_wiki/theme.json now, not loose in config/ -- fall back to the old path
             // once, on a fresh install of this version, so nobody's existing theme/mode gets reset.
             Path sourceFile = Files.exists(THEMES_FILE) ? THEMES_FILE :
                     Files.exists(LEGACY_THEMES_FILE) ? LEGACY_THEMES_FILE : null;
-            migratedFromLegacy = sourceFile == LEGACY_THEMES_FILE;
             if (sourceFile != null) {
                 String json = Files.readString(sourceFile);
                 JsonObject root = GSON.fromJson(json, JsonObject.class);
@@ -477,6 +475,9 @@ public class PhoenixTheme {
         activeName = loadedActive;
         active = REGISTRY.getOrDefault(activeName, REGISTRY.get("DARK"));
 
-        if (migratedFromLegacy) saveAll();
+        // Always write back, not just when migrating from the old path -- otherwise a totally fresh
+        // install (no file either old or new) never creates config/phoenix_wiki/ at all until the
+        // player happens to change a theme, unlike every other mod's config showing up on first load.
+        saveAll();
     }
 }
