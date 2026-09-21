@@ -2,7 +2,17 @@ package net.phoenixvine.wiki.client.rich;
 
 import java.util.List;
 
-public sealed interface RichBlock {
+/**
+ * A single block-level element of a parsed wiki page.
+ *
+ * This is intentionally NOT sealed: any mod can add its own block type by implementing this
+ * interface (record or otherwise) from a {@link net.phoenixvine.wiki.client.rich.markdown.BlockParser},
+ * then registering a matching
+ * {@link net.phoenixvine.wiki.client.rich.render.BlockRenderer} on
+ * {@link net.phoenixvine.wiki.client.rich.render.BlockRendererRegistry#DEFAULT} so it knows how to
+ * be measured and drawn. A block with no registered renderer is skipped rather than crashing.
+ */
+public interface RichBlock {
 
     List<RichSpan> spans();
 

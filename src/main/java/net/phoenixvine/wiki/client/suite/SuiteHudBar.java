@@ -1,5 +1,6 @@
 package net.phoenixvine.wiki.client.suite;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -78,7 +79,7 @@ public final class SuiteHudBar {
         }
     }
 
-    public static net.minecraft.network.chat.Component getTooltip(String modId) {
+    public static Component getTooltip(String modId) {
         synchronized (LOCK) {
             return ENTRIES.stream().filter(e -> e.modId().equals(modId))
                     .findFirst().map(e -> e.tooltip().get()).orElse(null);
@@ -177,17 +178,17 @@ public final class SuiteHudBar {
     }
 
     public static boolean screenWantsBar(Screen screen) {
-        if (screen instanceof Aware) return true;
-        if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) return false;
+        if (screen instanceof Aware) return false;
+        if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) return true;
 
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return false;
+        var mc = Minecraft.getInstance();
+        if (mc.player == null) return true;
 
         Inventory playerInv = mc.player.getInventory();
         for (Slot slot : containerScreen.getMenu().slots) {
-            if (slot.container == playerInv) return true;
+            if (slot.container == playerInv) return false;
         }
-        return false;
+        return true;
     }
 
     private static HudSlot slotAt(List<HudSlot> slots, double mx, double my) {
@@ -198,9 +199,9 @@ public final class SuiteHudBar {
     }
 
     private static void draw(GuiGraphics g, Minecraft mc, double hoverMx, double hoverMy) {
-        PhoenixTheme t = PhoenixTheme.current();
-        int panel = t.panel.getColor();
-        int border = t.accent.getColor();
+        var theme = PhoenixTheme.current();
+        int panel = theme.panel.getColor();
+        int border = theme.accent.getColor();
 
         List<HudSlot> slots = computeLayout();
         HudSlot hovered = slotAt(slots, hoverMx, hoverMy);
@@ -214,9 +215,9 @@ public final class SuiteHudBar {
             g.fill(x + size - 1, y, x + size, y + size, border);
             g.fill(x, y + size - 1, x + size, y + size, border);
             if (s.isSettings()) {
-                drawSettingsIcon(g, x, y, size, t);
+                drawSettingsIcon(g, x, y, size, theme);
             } else {
-                drawIcon(g, s.entry(), x, y, size, t);
+                drawIcon(g, s.entry(), x, y, size, theme);
             }
         }
 
@@ -243,12 +244,12 @@ public final class SuiteHudBar {
 
         int color = t.textDim.getColor();
         float a = ((color >>> 24) & 0xFF) / 255f;
-        com.mojang.blaze3d.systems.RenderSystem.setShaderColor(((color >> 16) & 0xFF) / 255f,
+       RenderSystem.setShaderColor(((color >> 16) & 0xFF) / 255f,
                 ((color >> 8) & 0xFF) / 255f, (color & 0xFF) / 255f, a > 0f ? a : 1f);
         try {
             g.blit(e.icon(), x + pad, y + pad, iconSize, iconSize, 0, 0, 16, 16, e.texWidth(), e.texHeight());
         } finally {
-            com.mojang.blaze3d.systems.RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+            RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         }
     }
 
@@ -274,16 +275,16 @@ public final class SuiteHudBar {
 
     @SubscribeEvent
     public static void onScreenRender(ScreenEvent.Render.Post event) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || entriesEmpty() || !screenWantsBar(event.getScreen())) return;
+        var mc = Minecraft.getInstance();
+        if (mc.player == null || entriesEmpty() || screenWantsBar(event.getScreen())) return;
         draw(event.getGuiGraphics(), mc, event.getMouseX(), event.getMouseY());
     }
 
     @SubscribeEvent
     public static void onScreenMouseClick(ScreenEvent.MouseButtonPressed.Pre event) {
-        Minecraft mc = Minecraft.getInstance();
+        var mc = Minecraft.getInstance();
         Screen screen = event.getScreen();
-        if (mc.player == null || entriesEmpty() || !screenWantsBar(screen)) return;
+        if (mc.player == null || entriesEmpty() || screenWantsBar(screen)) return;
 
         List<HudSlot> slots = computeLayout();
         HudSlot hit = slotAt(slots, event.getMouseX(), event.getMouseY());

@@ -213,5 +213,4 @@ tasks.register('publishToPhantasia', Copy) {
     into '../Phantasia/libs'
 }
 
-// (Archive now consumes this via mavenLocal() + modImplementation -- see the publishing{} block
-// above -- instead of a publishToArchive Copy task into a flatDir libs/ folder.)
+

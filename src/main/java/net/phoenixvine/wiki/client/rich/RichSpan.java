@@ -3,10 +3,15 @@ package net.phoenixvine.wiki.client.rich;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 
-public sealed interface RichSpan
-                                 permits RichSpan.Text, RichSpan.Link, RichSpan.Tip, RichSpan.Image,
-                                 RichSpan.CodeCopy, RichSpan.ItemIcon, RichSpan.DetailsToggle, RichSpan.TocJump,
-                                 RichSpan.ChecklistToggle {
+/**
+ * A single inline element within a block's text flow.
+ *
+ * Not sealed, for the same reason as {@link RichBlock}: a mod can add its own span type and
+ * register a rendering path for it wherever it builds spans (an
+ * {@link net.phoenixvine.wiki.client.rich.markdown.inline.InlineHandler} for markdown-driven
+ * content, or directly if constructing {@link RichBlock}s by hand).
+ */
+public interface RichSpan {
 
     record Text(String text, Style style, int background, String copyText, float scale) implements RichSpan {
         public Text(String text, Style style) {

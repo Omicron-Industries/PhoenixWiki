@@ -98,29 +98,30 @@ public class SuiteHudSettingsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        PhoenixTheme t = PhoenixTheme.current();
+        var theme = PhoenixTheme.current();
         this.renderBackground(g);
 
-        g.fill(panelX - 1, panelY - 1, panelX + panelW + 1, panelY + panelH + 1, t.border.getColor());
-        g.fill(panelX, panelY, panelX + panelW, panelY + panelH, t.panel.getColor());
+        g.fill(panelX - 1, panelY - 1, panelX + panelW + 1, panelY + panelH + 1,
+                theme.border.getColor());
+        g.fill(panelX, panelY, panelX + panelW, panelY + panelH, theme.panel.getColor());
 
         g.drawCenteredString(this.font, "Suite HUD Settings", panelX + panelW / 2, panelY + 8,
-                t.accent.getColor());
+                theme.accent.getColor());
 
         int y = panelY + HEADER_H - ROW_H;
-        g.drawString(this.font, "Suite-wide scale", panelX + 12, y + 4, t.text.getColor(), false);
+        g.drawString(this.font, "Suite-wide scale", panelX + 12, y + 4, theme.text.getColor(), false);
         y += ROW_H + 4;
 
         List<String> modIds = SuiteHudBar.getRegisteredModIds();
         if (modIds.isEmpty()) {
             g.drawString(this.font, "§7No suite mods registered yet.", panelX + 12, y + 4,
-                    t.textDim.getColor(), false);
+                    theme.textDim.getColor(), false);
         }
         for (String modId : modIds) {
             Component tip = SuiteHudBar.getTooltip(modId);
             String name = tip != null ? tip.getString().replaceAll("§.", "") : modId;
             if (name.length() > 14) name = name.substring(0, 13) + "…";
-            g.drawString(this.font, name, panelX + 12, y + 4, t.text.getColor(), false);
+            g.drawString(this.font, name, panelX + 12, y + 4, theme.text.getColor(), false);
             y += ROW_H;
         }
 

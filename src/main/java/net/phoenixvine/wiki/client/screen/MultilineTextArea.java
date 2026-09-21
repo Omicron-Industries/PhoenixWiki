@@ -393,15 +393,7 @@ public class MultilineTextArea extends AbstractWidget {
     @Override
     protected void updateWidgetNarration(NarrationElementOutput out) {}
 
-    private static class LinePos {
+    private record LinePos(int start, int end, String text) {
 
-        final int start, end;
-        final String text;
-
-        LinePos(int start, int end, String text) {
-            this.start = start;
-            this.end = end;
-            this.text = text;
-        }
     }
 }

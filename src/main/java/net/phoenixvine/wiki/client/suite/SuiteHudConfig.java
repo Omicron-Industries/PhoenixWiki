@@ -34,13 +34,6 @@ public final class SuiteHudConfig {
 
     private static Data data = null;
 
-    /**
-     * Forces the config to load (and, per {@link #ensureLoaded}, write itself back out) right now
-     * instead of waiting for whichever mod's HUD button happens to render first -- nothing calls
-     * isEnabled()/getEffectiveScale() etc. until a screen with the suite bar actually opens, so
-     * without this the file (and its config/phoenix_wiki/ folder) might never appear at all if the
-     * player never opens an inventory-adjacent screen. Called once from PhoenixWiki's own client setup.
-     */
     public static void init() {
         synchronized (LOCK) {
             ensureLoaded();
@@ -51,7 +44,6 @@ public final class SuiteHudConfig {
         return new File(Minecraft.getInstance().gameDirectory, "config/phoenix_wiki/suite_hud.json");
     }
 
-    /** Where this file lived before every PhoenixWiki config got its own subfolder -- see {@link #ensureLoaded}. */
     private static File legacyFile() {
         return new File(Minecraft.getInstance().gameDirectory, "config/phoenix-wiki-suite.json");
     }
@@ -59,12 +51,12 @@ public final class SuiteHudConfig {
     private static void ensureLoaded() {
         if (data != null) return;
         data = new Data();
-        File f = file();
-        if (!f.exists() && legacyFile().exists()) {
-            f = legacyFile();
+        var file = file();
+        if (!file.exists() && legacyFile().exists()) {
+            file = legacyFile();
         }
-        if (f.exists()) {
-            try (FileReader r = new FileReader(f)) {
+        if (file.exists()) {
+            try (FileReader r = new FileReader(file)) {
                 JsonElement root = JsonParser.parseReader(r);
                 if (root != null && root.isJsonArray()) {
                     
@@ -81,9 +73,7 @@ public final class SuiteHudConfig {
                 PhoenixWiki.LOGGER.warn("[PhoenixWiki] Failed to load suite config: {}", e.getMessage());
             }
         }
-        // Always write back, not just when migrating from the old path -- otherwise a totally fresh
-        // install (no file either old or new) never creates config/phoenix_wiki/ at all until the
-        // player happens to change a HUD setting, unlike every other mod's config showing up on first load.
+
         save();
     }
 

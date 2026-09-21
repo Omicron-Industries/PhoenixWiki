@@ -1,11 +1,13 @@
 package net.phoenixvine.wiki.theme;
 
+import com.google.gson.JsonElement;
 import net.minecraft.util.Mth;
 import net.minecraftforge.fml.loading.FMLPaths;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import net.phoenixvine.wiki.PhoenixWiki;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -188,7 +190,7 @@ public class PhoenixTheme {
             try {
                 r.run();
             } catch (Exception e) {
-                net.phoenixvine.wiki.PhoenixWiki.LOGGER.error("Suite theme change listener threw", e);
+                PhoenixWiki.LOGGER.error("Suite theme change listener threw", e);
             }
         }
     }
@@ -209,7 +211,6 @@ public class PhoenixTheme {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private static final Path THEMES_FILE = FMLPaths.CONFIGDIR.get().resolve("phoenix_wiki").resolve("theme.json");
-    /** Where this file lived before every PhoenixWiki config got its own subfolder -- see {@link #loadThemes}. */
     private static final Path LEGACY_THEMES_FILE = FMLPaths.CONFIGDIR.get().resolve("phoenixsuite_theme.json");
 
     public PhoenixTheme() {}
@@ -331,9 +332,9 @@ public class PhoenixTheme {
         return candidate;
     }
 
-    public static boolean deleteCustom(String name) {
-        if (isBuiltin(name)) return false;
-        if (REGISTRY.remove(name) == null) return false;
+    public static void deleteCustom(String name) {
+        if (isBuiltin(name)) return;
+        if (REGISTRY.remove(name) == null) return;
         if (name.equals(activeName)) {
             activeName = "DARK";
             active = REGISTRY.get("DARK");
@@ -342,7 +343,6 @@ public class PhoenixTheme {
         perModActiveTheme.values().removeIf(name::equals);
         saveAll();
         fireChangeListeners();
-        return true;
     }
 
     private static JsonObject themeToJson(PhoenixTheme t) {
@@ -392,7 +392,7 @@ public class PhoenixTheme {
             root.add("custom", customObj);
             Files.writeString(THEMES_FILE, GSON.toJson(root));
         } catch (Exception e) {
-            net.phoenixvine.wiki.PhoenixWiki.LOGGER.error("Failed to save {}", THEMES_FILE, e);
+           PhoenixWiki.LOGGER.error("Failed to save {}", THEMES_FILE, e);
         }
     }
 
@@ -443,8 +443,6 @@ public class PhoenixTheme {
         sharedMode = true;
         perModActiveTheme.clear();
         try {
-            // config/phoenix_wiki/theme.json now, not loose in config/ -- fall back to the old path
-            // once, on a fresh install of this version, so nobody's existing theme/mode gets reset.
             Path sourceFile = Files.exists(THEMES_FILE) ? THEMES_FILE :
                     Files.exists(LEGACY_THEMES_FILE) ? LEGACY_THEMES_FILE : null;
             if (sourceFile != null) {
@@ -452,7 +450,7 @@ public class PhoenixTheme {
                 JsonObject root = GSON.fromJson(json, JsonObject.class);
                 if (root != null) {
                     if (root.has("custom") && root.get("custom").isJsonObject()) {
-                        for (Map.Entry<String, com.google.gson.JsonElement> e : root.getAsJsonObject("custom")
+                        for (Map.Entry<String, JsonElement> e : root.getAsJsonObject("custom")
                                 .entrySet()) {
                             if (!e.getValue().isJsonObject()) continue;
                             REGISTRY.put(e.getKey(), themeFromJson(e.getValue().getAsJsonObject()));
@@ -461,7 +459,7 @@ public class PhoenixTheme {
                     if (root.has("active")) loadedActive = root.get("active").getAsString();
                     if (root.has("sharedMode")) sharedMode = root.get("sharedMode").getAsBoolean();
                     if (root.has("perMod") && root.get("perMod").isJsonObject()) {
-                        for (Map.Entry<String, com.google.gson.JsonElement> e : root.getAsJsonObject("perMod")
+                        for (Map.Entry<String, JsonElement> e : root.getAsJsonObject("perMod")
                                 .entrySet()) {
                             perModActiveTheme.put(e.getKey(), e.getValue().getAsString());
                         }
@@ -469,15 +467,12 @@ public class PhoenixTheme {
                 }
             }
         } catch (Exception e) {
-            net.phoenixvine.wiki.PhoenixWiki.LOGGER.error("Failed to load {}", THEMES_FILE, e);
+            PhoenixWiki.LOGGER.error("Failed to load {}", THEMES_FILE, e);
         }
 
         activeName = loadedActive;
         active = REGISTRY.getOrDefault(activeName, REGISTRY.get("DARK"));
 
-        // Always write back, not just when migrating from the old path -- otherwise a totally fresh
-        // install (no file either old or new) never creates config/phoenix_wiki/ at all until the
-        // player happens to change a theme, unlike every other mod's config showing up on first load.
         saveAll();
     }
 }

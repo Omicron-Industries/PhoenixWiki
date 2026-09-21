@@ -171,7 +171,7 @@ public class WikiTextInputScreen extends Screen {
                 g.fill(insX + 44, rowY, insX + 58, rowY + 12, col);
             }
         }
-        g.drawString(font, "§8{#RRGGBB} syntax — no & needed", insX + 60, rowY + 2, C_TEXT_DIM, false);
+        g.drawString(font, "§8{#RRGGBB} syntax.", insX + 60, rowY + 2, C_TEXT_DIM, false);
     }
 
     private void renderFormatButtons(GuiGraphics g, int mx, int my) {

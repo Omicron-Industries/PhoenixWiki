@@ -1,10 +1,13 @@
 package net.phoenixvine.wiki.client.screen;
 
+import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
+import net.phoenixvine.wiki.PhoenixWiki;
 import net.phoenixvine.wiki.client.rich.RichBlock;
 import net.phoenixvine.wiki.client.rich.RichSpan;
 import net.phoenixvine.wiki.client.rich.WikiMarkdownParser;
@@ -14,6 +17,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -353,7 +357,7 @@ public class WikiScreen extends Screen {
         g.fill(0, 0, vw, vh, theme.bg());
 
         String title = pages.isEmpty() ? "Wiki" : pages.get(Math.min(activePage, pages.size() - 1)).title();
-        drawHeader(g, "§fWiki  §8— §7" + title);
+        drawHeader(g, "§fWiki §7" + title);
 
         searchBox.setX(4);
         searchBox.setY(HEADER_H + 3);
@@ -430,7 +434,7 @@ public class WikiScreen extends Screen {
             if (r.span() instanceof RichSpan.Tip t) {
                 g.pose().pushPose();
                 g.pose().translate(0f, 0f, 500f);
-                List<net.minecraft.util.FormattedCharSequence> lines =
+                List<FormattedCharSequence> lines =
                         font.split(Component.literal(t.tooltip()), 240);
                 g.renderTooltip(font, lines, mx, my);
                 g.pose().popPose();
@@ -439,7 +443,7 @@ public class WikiScreen extends Screen {
             if (r.span() instanceof RichSpan.ItemIcon icon && icon.tooltip() != null && !icon.tooltip().isBlank()) {
                 g.pose().pushPose();
                 g.pose().translate(0f, 0f, 500f);
-                List<net.minecraft.util.FormattedCharSequence> lines =
+                List<FormattedCharSequence> lines =
                         font.split(Component.literal(icon.tooltip()), 240);
                 g.renderTooltip(font, lines, mx, my);
                 g.pose().popPose();
@@ -601,9 +605,9 @@ public class WikiScreen extends Screen {
                         jumpToPage(l.url().substring(5));
                     } else {
                         try {
-                            net.minecraft.Util.getPlatform().openUri(java.net.URI.create(l.url()));
+                           Util.getPlatform().openUri(URI.create(l.url()));
                         } catch (Exception e) {
-                            net.phoenixvine.wiki.PhoenixWiki.LOGGER.warn(
+                            PhoenixWiki.LOGGER.warn(
                                     "PhoenixWiki: failed to open link '{}'", l.url(), e);
                         }
                     }

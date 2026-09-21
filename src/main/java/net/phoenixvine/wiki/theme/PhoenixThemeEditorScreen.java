@@ -4,12 +4,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
 import org.jetbrains.annotations.NotNull;
 
+import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -57,7 +59,7 @@ public class PhoenixThemeEditorScreen extends Screen {
     private static final int MIN_CONTENT_H = 420;
 
     private float uiScale = 1f;
-    private int vw, vh;
+    private int virtualWidth, virtualHeight;
 
     private long animTick = 0L;
 
@@ -88,64 +90,64 @@ public class PhoenixThemeEditorScreen extends Screen {
         uiScale = (width < MIN_CONTENT_W || height < MIN_CONTENT_H) ?
                 Math.min((float) width / MIN_CONTENT_W, (float) height / MIN_CONTENT_H) : 1f;
         uiScale = Math.max(0.1f, uiScale);
-        vw = Math.round(width / uiScale);
-        vh = Math.round(height / uiScale);
+        virtualWidth = Math.round(width / uiScale);
+        virtualHeight = Math.round(height / uiScale);
 
-        PhoenixTheme t = PhoenixTheme.current(ownerModId);
-        String curName = PhoenixTheme.getActiveName(ownerModId);
+        var phoenixTheme = PhoenixTheme.current(ownerModId);
+        var curName = PhoenixTheme.getActiveName(ownerModId);
 
-        syncPalette(t);
+        syncPalette(phoenixTheme);
 
         if (!curName.equals(lastTrackedName)) {
             lastTrackedName = curName;
-            savedSnap = makeSnap(t, curName);
+            savedSnap = makeSnap(phoenixTheme, curName);
             undoStack.clear();
             confirmActive = false;
             pendingAction = null;
         }
 
         int sbW = sidebarW();
-        int sbX = vw - sbW + 6;
+        int sbX = virtualWidth - sbW + 6;
 
         int boxW = sbW - 97;
         int y = 38;
-        int rh = vh > 360 ? 20 : 17;
+        int rh = virtualHeight > 360 ? 20 : 17;
 
         sections.add(new SectionLabel("■ Base Layers", sbX, y));
         y += 12;
-        addField("BG", t.bg, sbX, y, boxW);
+        addField("BG", phoenixTheme.bg, sbX, y, boxW);
         y += rh;
-        addField("Panel", t.panel, sbX, y, boxW);
+        addField("Panel", phoenixTheme.panel, sbX, y, boxW);
         y += rh;
-        addField("Header", t.header, sbX, y, boxW);
+        addField("Header", phoenixTheme.header, sbX, y, boxW);
         y += rh;
-        addField("Border", t.border, sbX, y, boxW);
+        addField("Border", phoenixTheme.border, sbX, y, boxW);
         y += rh + 6;
 
         sections.add(new SectionLabel("■ Typography", sbX, y));
         y += 12;
-        addField("Text", t.text, sbX, y, boxW);
+        addField("Text", phoenixTheme.text, sbX, y, boxW);
         y += rh;
-        addField("Text Dim", t.textDim, sbX, y, boxW);
+        addField("Text Dim", phoenixTheme.textDim, sbX, y, boxW);
         y += rh;
-        addField("Faint", t.textFaint, sbX, y, boxW);
+        addField("Faint", phoenixTheme.textFaint, sbX, y, boxW);
         y += rh + 6;
 
         sections.add(new SectionLabel("■ State Colors", sbX, y));
         y += 12;
-        addField("Accent", t.accent, sbX, y, boxW);
+        addField("Accent", phoenixTheme.accent, sbX, y, boxW);
         y += rh;
-        addField("Done", t.done, sbX, y, boxW);
+        addField("Done", phoenixTheme.done, sbX, y, boxW);
         y += rh;
-        addField("Active", t.activeColor, sbX, y, boxW);
+        addField("Active", phoenixTheme.activeColor, sbX, y, boxW);
         y += rh;
-        addField("Locked", t.locked, sbX, y, boxW);
+        addField("Locked", phoenixTheme.locked, sbX, y, boxW);
         y += rh;
-        addField("Ally", t.ally, sbX, y, boxW);
+        addField("Ally", phoenixTheme.ally, sbX, y, boxW);
         y += rh + 6;
 
-        int ctrlY = Math.max(y + 4, vh - 92);
-        nameInput = new EditBox(font, vw - sbW + 10, ctrlY, sbW - 20, 16, Component.literal("Theme name"));
+        int ctrlY = Math.max(y + 4, virtualHeight - 92);
+        nameInput = new EditBox(font, virtualWidth - sbW + 10, ctrlY, sbW - 20, 16, Component.literal("Theme name"));
         nameInput.setValue(curName);
         nameInput.setMaxLength(32);
         nameInput.setResponder(s -> confirmActive = false);
@@ -154,15 +156,15 @@ public class PhoenixThemeEditorScreen extends Screen {
         int halfW = (sbW - 20 - 4) / 2;
         addRenderableWidget(Button
                 .builder(Component.literal("§aSave"), b -> save())
-                .bounds(vw - sbW + 10, ctrlY + 20, halfW, 18)
-                .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(
-                        "Saves the current colors under the name above - overwrites that theme if it\n" +
+                .bounds(virtualWidth - sbW + 10, ctrlY + 20, halfW, 18)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Saves the current colors under the name above. Overwrites that theme if it\n" +
                                 "already exists (only ever a custom one, never a built-in).")))
                 .build());
         addRenderableWidget(Button
                 .builder(Component.literal("§b+ New"), b -> newTheme())
-                .bounds(vw - sbW + 10 + halfW + 4, ctrlY + 20, sbW - 20 - halfW - 4, 18)
-                .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(
+                .bounds(virtualWidth - sbW + 10 + halfW + 4, ctrlY + 20, sbW - 20 - halfW - 4, 18)
+                .tooltip(Tooltip.create(Component.literal(
                         "Starts a brand-new custom theme (a copy of the current colors) under its own\n" +
                                 "name, so editing it never touches whatever theme you started from.")))
                 .build());
@@ -179,7 +181,7 @@ public class PhoenixThemeEditorScreen extends Screen {
                     }
                     onClose();
                 })
-                .bounds(vw - sbW + 10, ctrlY + 42, sbW - 20, 18).build());
+                .bounds(virtualWidth - sbW + 10, ctrlY + 42, sbW - 20, 18).build());
 
         addRenderableWidget(Button
                 .builder(Component.literal(PhoenixTheme.isSharedMode() ?
@@ -189,10 +191,10 @@ public class PhoenixThemeEditorScreen extends Screen {
                             lastTrackedName = null;
                             init();
                         })
-                .bounds(vw - sbW + 10, ctrlY + 64, sbW - 20, 18)
-                .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(
+                .bounds(virtualWidth - sbW + 10, ctrlY + 64, sbW - 20, 18)
+                .tooltip(Tooltip.create(Component.literal(
                         "Shared: every Phoenix suite mod uses this one theme.\n" +
-                                "Per-mod: each mod remembers its own -- the theme you set here only\n" +
+                                "Per-mod: each mod remembers its own. The theme you set here only\n" +
                                 "applies to whichever mod opened this screen.")))
                 .build());
     }
@@ -215,8 +217,8 @@ public class PhoenixThemeEditorScreen extends Screen {
 
         int totalW = SV_SIZE + HUE_GAP + HUE_W + PICKER_PAD * 2;
         int totalH = SV_SIZE + PICKER_PAD * 2 + 20;
-        pickerX = Mth.clamp(f.box().getX(), 4, Math.max(4, vw - totalW - 4));
-        pickerY = Mth.clamp(f.box().getY() + 18, 4, Math.max(4, vh - totalH - 4));
+        pickerX = Mth.clamp(f.box().getX(), 4, Math.max(4, virtualWidth - totalW - 4));
+        pickerY = Mth.clamp(f.box().getY() + 18, 4, Math.max(4, virtualHeight - totalH - 4));
     }
 
     private void closeColorPicker() {
@@ -227,7 +229,7 @@ public class PhoenixThemeEditorScreen extends Screen {
 
     private void applyPickerColor() {
         if (openPickerField == null) return;
-        int rgb = java.awt.Color.HSBtoRGB(pickerHue, pickerSat, pickerVal) & 0xFFFFFF;
+        int rgb = Color.HSBtoRGB(pickerHue, pickerSat, pickerVal) & 0xFFFFFF;
         String hex = String.format("FF%06X", rgb);
         openPickerField.target().set(hex);
         openPickerField.box().setValue(hex);
@@ -285,15 +287,15 @@ public class PhoenixThemeEditorScreen extends Screen {
 
         int bgTop = C_BG;
         int bgBot = blend(C_BG, 0xFF000000, 0.35f);
-        g.fillGradient(0, 0, vw - sbW, vh, bgTop, bgBot);
-        g.fill(vw - sbW, 0, vw, vh, C_PANEL);
-        g.fill(vw - sbW, 0, vw - sbW + 1, vh, C_BORDER);
+        g.fillGradient(0, 0, virtualWidth - sbW, virtualHeight, bgTop, bgBot);
+        g.fill(virtualWidth - sbW, 0, virtualWidth, virtualHeight, C_PANEL);
+        g.fill(virtualWidth - sbW, 0, virtualWidth - sbW + 1, virtualHeight, C_BORDER);
 
-        g.fill(vw - sbW, 0, vw, 28, C_HEADER);
+        g.fill(virtualWidth - sbW, 0, virtualWidth, 28, C_HEADER);
         float headerPulse = animPulse(0.7f, 0.3f, 900.0);
         int headerAccent = (Math.min(255, (int) (0xFF * headerPulse)) << 24) | (C_ACCENT & 0xFFFFFF);
-        g.fill(vw - sbW, 27, vw, 28, headerAccent);
-        g.drawString(font, "§fTheme Editor", vw - sbW + 8, 8, C_ACCENT, false);
+        g.fill(virtualWidth - sbW, 27, virtualWidth, 28, headerAccent);
+        g.drawString(font, "§fTheme Editor", virtualWidth - sbW + 8, 8, C_ACCENT, false);
 
         String status;
         int statusC;
@@ -307,7 +309,7 @@ public class PhoenixThemeEditorScreen extends Screen {
             status = "§7○ " + PhoenixTheme.getActiveName(ownerModId);
             statusC = C_DIM;
         }
-        g.drawString(font, status, vw - sbW + 8, 19, statusC, false);
+        g.drawString(font, status, virtualWidth - sbW + 8, 19, statusC, false);
 
         for (SectionLabel s : sections) {
             g.drawString(font, "§8" + s.title, s.x, s.y, C_ACCENT, false);
@@ -350,26 +352,26 @@ public class PhoenixThemeEditorScreen extends Screen {
         g.fill(pickerX, pickerY, pickerX + totalW, pickerY + totalH, 0xF00A0A0E);
         drawBorder(g, pickerX, pickerY, totalW, totalH, C_BORDER);
 
-        int svX = pickerX + PICKER_PAD, svY = pickerY + PICKER_PAD;
+        int svX = pickerX + PICKER_PAD, hueY = pickerY + PICKER_PAD;
         int cell = 2;
         for (int px = 0; px < SV_SIZE; px += cell) {
             float s = px / (float) (SV_SIZE - 1);
             for (int py = 0; py < SV_SIZE; py += cell) {
                 float v = 1f - py / (float) (SV_SIZE - 1);
-                int rgb = java.awt.Color.HSBtoRGB(pickerHue, s, v);
-                g.fill(svX + px, svY + py, svX + px + cell, svY + py + cell, 0xFF000000 | (rgb & 0xFFFFFF));
+                int rgb = Color.HSBtoRGB(pickerHue, s, v);
+                g.fill(svX + px, hueY + py, svX + px + cell, hueY + py + cell, 0xFF000000 | (rgb & 0xFFFFFF));
             }
         }
-        drawBorder(g, svX, svY, SV_SIZE, SV_SIZE, C_BORDER);
+        drawBorder(g, svX, hueY, SV_SIZE, SV_SIZE, C_BORDER);
 
         int cursorX = svX + Math.round(pickerSat * (SV_SIZE - 1));
-        int cursorY = svY + Math.round((1f - pickerVal) * (SV_SIZE - 1));
+        int cursorY = hueY + Math.round((1f - pickerVal) * (SV_SIZE - 1));
         drawBorder(g, cursorX - 3, cursorY - 3, 6, 6, pickerVal > 0.5f ? 0xFF000000 : 0xFFFFFFFF);
 
-        int hueX = svX + SV_SIZE + HUE_GAP, hueY = svY;
+        int hueX = svX + SV_SIZE + HUE_GAP;
         for (int py = 0; py < SV_SIZE; py++) {
             float h = py / (float) (SV_SIZE - 1);
-            int rgb = java.awt.Color.HSBtoRGB(h, 1f, 1f);
+            int rgb = Color.HSBtoRGB(h, 1f, 1f);
             g.fill(hueX, hueY + py, hueX + HUE_W, hueY + py + 1, 0xFF000000 | (rgb & 0xFFFFFF));
         }
         drawBorder(g, hueX, hueY, HUE_W, SV_SIZE, C_BORDER);
@@ -377,7 +379,7 @@ public class PhoenixThemeEditorScreen extends Screen {
         g.fill(hueX - 2, hueMarkerY - 1, hueX + HUE_W + 2, hueMarkerY, 0xFFFFFFFF);
         g.fill(hueX - 2, hueMarkerY, hueX + HUE_W + 2, hueMarkerY + 1, 0xFF000000);
 
-        int previewY = svY + SV_SIZE + 4;
+        int previewY = hueY + SV_SIZE + 4;
         int rgbNow = java.awt.Color.HSBtoRGB(pickerHue, pickerSat, pickerVal);
         g.fill(svX, previewY, svX + totalW - PICKER_PAD * 2, previewY + 12, 0xFF000000 | (rgbNow & 0xFFFFFF));
         drawBorder(g, svX, previewY, totalW - PICKER_PAD * 2, 12, C_BORDER);
@@ -391,8 +393,8 @@ public class PhoenixThemeEditorScreen extends Screen {
     }
 
     private void renderPreview(GuiGraphics g, int mx, int my, int sbW) {
-        PhoenixTheme t = PhoenixTheme.current(ownerModId);
-        int canvasW = vw - sbW;
+        var theme = PhoenixTheme.current(ownerModId);
+        int canvasW = virtualWidth - sbW;
         int mockW = Math.min(canvasW - 20, 360);
         int mockX = 10;
 
@@ -401,23 +403,23 @@ public class PhoenixThemeEditorScreen extends Screen {
         g.drawString(font, "§7State colors · accent line · text hierarchy", mockX, animY, C_FAINT, false);
 
         int mockTop = animY + 13;
-        int mockH = Math.min(150, (vh - 20) / 2);
+        int mockH = Math.min(150, (virtualHeight - 20) / 2);
 
-        g.fill(mockX, mockTop, mockX + mockW, mockTop + mockH, t.bg.getColor());
-        drawBorder(g, mockX, mockTop, mockW, mockH, t.border.getColor());
+        g.fill(mockX, mockTop, mockX + mockW, mockTop + mockH, theme.bg.getColor());
+        drawBorder(g, mockX, mockTop, mockW, mockH, theme.border.getColor());
 
         int hdrH = 17;
-        g.fill(mockX, mockTop, mockX + mockW, mockTop + hdrH, t.header.getColor());
-        g.fill(mockX, mockTop + hdrH - 1, mockX + mockW, mockTop + hdrH, t.border.getColor());
-        g.drawString(font, "§f✦ " + previewAppName, mockX + 5, mockTop + 5, t.text.getColor(), false);
+        g.fill(mockX, mockTop, mockX + mockW, mockTop + hdrH, theme.header.getColor());
+        g.fill(mockX, mockTop + hdrH - 1, mockX + mockW, mockTop + hdrH, theme.border.getColor());
+        g.drawString(font, "§f✦ " + previewAppName, mockX + 5, mockTop + 5, theme.text.getColor(), false);
 
         int sideW = Math.min(52, mockW / 5);
-        g.fill(mockX, mockTop + hdrH, mockX + sideW, mockTop + mockH, t.panel.getColor());
-        g.fill(mockX + sideW, mockTop + hdrH, mockX + sideW + 1, mockTop + mockH, t.border.getColor());
+        g.fill(mockX, mockTop + hdrH, mockX + sideW, mockTop + mockH, theme.panel.getColor());
+        g.fill(mockX + sideW, mockTop + hdrH, mockX + sideW + 1, mockTop + mockH, theme.border.getColor());
         int navBarW = Math.max(4, sideW - 12);
-        g.fill(mockX + 4, mockTop + hdrH + 4, mockX + 4 + navBarW, mockTop + hdrH + 9, t.textDim.getColor());
-        g.fill(mockX + 4, mockTop + hdrH + 15, mockX + 4 + navBarW, mockTop + hdrH + 20, t.textFaint.getColor());
-        g.fill(mockX + 4, mockTop + hdrH + 26, mockX + 4 + navBarW, mockTop + hdrH + 31, t.textFaint.getColor());
+        g.fill(mockX + 4, mockTop + hdrH + 4, mockX + 4 + navBarW, mockTop + hdrH + 9, theme.textDim.getColor());
+        g.fill(mockX + 4, mockTop + hdrH + 15, mockX + 4 + navBarW, mockTop + hdrH + 20, theme.textFaint.getColor());
+        g.fill(mockX + 4, mockTop + hdrH + 26, mockX + 4 + navBarW, mockTop + hdrH + 31, theme.textFaint.getColor());
 
         int sz = Math.max(16, Math.min(26, (mockW - sideW - 30) / 6));
         int n1x = mockX + sideW + 14;
@@ -426,50 +428,50 @@ public class PhoenixThemeEditorScreen extends Screen {
         int ny = mockTop + hdrH + (mockH - hdrH) / 2 - sz / 2;
 
         int lineY = ny + sz / 2;
-        drawMockLine(g, n1x + sz, lineY, n2x, lineY, t.done.getColor());
+        drawMockLine(g, n1x + sz, lineY, n2x, lineY, theme.done.getColor());
         drawMockLine(g, n2x + sz, lineY, n3x, lineY,
-                (t.locked.getColor() & 0x00FFFFFF) | 0x66000000);
+                (theme.locked.getColor() & 0x00FFFFFF) | 0x66000000);
 
         if (!PhoenixTheme.isReduceMotion()) {
             float sparkT = (float) ((animTick / 900.0) % 1.0);
             int sparkX = n1x + sz + (int) (sparkT * (n2x - (n1x + sz)));
             int sparkA = Math.min(255, (int) (0xFF * animPulse(0.75f, 0.25f, 200.0)));
             g.fill(sparkX - 1, lineY - 2, sparkX + 2, lineY + 3,
-                    (sparkA << 24) | (t.activeColor.getColor() & 0xFFFFFF));
+                    (sparkA << 24) | (theme.activeColor.getColor() & 0xFFFFFF));
         }
 
-        g.fill(n1x, ny, n1x + sz, ny + sz, (t.done.getColor() & 0x00FFFFFF) | 0xFF081A0E);
-        drawBorder(g, n1x, ny, sz, sz, t.done.getColor());
-        g.drawCenteredString(font, "§a✔", n1x + sz / 2, ny + sz / 2 - 4, t.done.getColor());
+        g.fill(n1x, ny, n1x + sz, ny + sz, (theme.done.getColor() & 0x00FFFFFF) | 0xFF081A0E);
+        drawBorder(g, n1x, ny, sz, sz, theme.done.getColor());
+        g.drawCenteredString(font, "§a✔", n1x + sz / 2, ny + sz / 2 - 4, theme.done.getColor());
 
-        g.fill(n2x, ny, n2x + sz, ny + sz, (t.activeColor.getColor() & 0x00FFFFFF) | 0xFF221C00);
+        g.fill(n2x, ny, n2x + sz, ny + sz, (theme.activeColor.getColor() & 0x00FFFFFF) | 0xFF221C00);
         float activePulse = animPulse(0.6f, 0.4f, 500.0);
         int glowA = Math.min(255, (int) (0x55 * activePulse));
-        int glowColor = (glowA << 24) | (t.activeColor.getColor() & 0xFFFFFF);
+        int glowColor = (glowA << 24) | (theme.activeColor.getColor() & 0xFFFFFF);
         drawBorder(g, n2x - 2, ny - 2, sz + 4, sz + 4, glowColor);
-        drawBorder(g, n2x, ny, sz, sz, t.activeColor.getColor());
-        g.drawCenteredString(font, "§e◎", n2x + sz / 2, ny + sz / 2 - 4, t.activeColor.getColor());
+        drawBorder(g, n2x, ny, sz, sz, theme.activeColor.getColor());
+        g.drawCenteredString(font, "§e◎", n2x + sz / 2, ny + sz / 2 - 4, theme.activeColor.getColor());
 
-        g.fill(n3x, ny, n3x + sz, ny + sz, (t.locked.getColor() & 0x00FFFFFF) | 0xFF1A1A24);
-        drawBorder(g, n3x, ny, sz, sz, t.locked.getColor());
+        g.fill(n3x, ny, n3x + sz, ny + sz, (theme.locked.getColor() & 0x00FFFFFF) | 0xFF1A1A24);
+        drawBorder(g, n3x, ny, sz, sz, theme.locked.getColor());
         g.fill(n3x + 1, ny + 1, n3x + sz - 1, ny + sz - 1, 0x880B0B0F);
-        g.drawCenteredString(font, "§8✕", n3x + sz / 2, ny + sz / 2 - 4, t.locked.getColor());
+        g.drawCenteredString(font, "§8✕", n3x + sz / 2, ny + sz / 2 - 4, theme.locked.getColor());
 
         int lblY = ny + sz + 3;
         if (lblY + 8 < mockTop + mockH) {
-            g.drawCenteredString(font, "§8Done", n1x + sz / 2, lblY, t.textFaint.getColor());
-            g.drawCenteredString(font, "§8Active", n2x + sz / 2, lblY, t.textFaint.getColor());
-            g.drawCenteredString(font, "§8Locked", n3x + sz / 2, lblY, t.textFaint.getColor());
+            g.drawCenteredString(font, "§8Done", n1x + sz / 2, lblY, theme.textFaint.getColor());
+            g.drawCenteredString(font, "§8Active", n2x + sz / 2, lblY, theme.textFaint.getColor());
+            g.drawCenteredString(font, "§8Locked", n3x + sz / 2, lblY, theme.textFaint.getColor());
         }
 
         int swY = mockTop + mockH - 7;
         if (swY > mockTop + hdrH + 4) {
             int sw = Math.max(4, (mockW - sideW - 10) / 5);
             int sx = mockX + sideW + 5;
-            g.fill(sx, swY, sx + sw, swY + 5, t.accent.getColor());
-            g.fill(sx + sw + 2, swY, sx + sw * 2 + 2, swY + 5, t.text.getColor());
-            g.fill(sx + sw * 2 + 4, swY, sx + sw * 3 + 4, swY + 5, t.textDim.getColor());
-            g.fill(sx + sw * 3 + 6, swY, sx + sw * 4 + 6, swY + 5, t.textFaint.getColor());
+            g.fill(sx, swY, sx + sw, swY + 5, theme.accent.getColor());
+            g.fill(sx + sw + 2, swY, sx + sw * 2 + 2, swY + 5, theme.text.getColor());
+            g.fill(sx + sw * 2 + 4, swY, sx + sw * 3 + 4, swY + 5, theme.textDim.getColor());
+            g.fill(sx + sw * 3 + 6, swY, sx + sw * 4 + 6, swY + 5, theme.textFaint.getColor());
         }
 
         int listY = mockTop + mockH + 8;
@@ -479,21 +481,21 @@ public class PhoenixThemeEditorScreen extends Screen {
 
         List<String> vis = visibleThemes();
         int itemH = 14;
-        int maxVis = Math.max(1, (vh - listY - 6) / itemH);
+        int maxVis = Math.max(1, (virtualHeight - listY - 6) / itemH);
         int maxScroll = Math.max(0, vis.size() - maxVis);
         scrollOffset = Mth.clamp(scrollOffset, 0, maxScroll);
 
-        for (int i = scrollOffset; i < vis.size() && listY + itemH <= vh - 4; i++) {
+        for (int i = scrollOffset; i < vis.size() && listY + itemH <= virtualHeight - 4; i++) {
             String name = vis.get(i);
             boolean sel = name.equals(PhoenixTheme.getActiveName(ownerModId));
             boolean hov = mx >= mockX && mx <= mockX + mockW && my >= listY && my < listY + itemH;
 
-            int rowBg = sel ? ((t.accent.getColor() & 0x00FFFFFF) | 0x33000000) :
-                    hov ? ((t.border.getColor() & 0x00FFFFFF) | 0x22000000) : 0;
+            int rowBg = sel ? ((theme.accent.getColor() & 0x00FFFFFF) | 0x33000000) :
+                    hov ? ((theme.border.getColor() & 0x00FFFFFF) | 0x22000000) : 0;
             if (rowBg != 0) g.fill(mockX, listY, mockX + mockW, listY + itemH, rowBg);
-            drawBorder(g, mockX, listY, mockW, itemH, (t.border.getColor() & 0x00FFFFFF) | 0x44000000);
+            drawBorder(g, mockX, listY, mockW, itemH, (theme.border.getColor() & 0x00FFFFFF) | 0x44000000);
 
-            int nameColor = sel ? t.accent.getColor() : hov ? t.text.getColor() : t.textDim.getColor();
+            int nameColor = sel ? theme.accent.getColor() : hov ? theme.text.getColor() : theme.textDim.getColor();
             g.drawString(font, (sel ? "●" : "○") + " " + name, mockX + 6, listY + 3, nameColor, false);
 
             if (!PhoenixTheme.isBuiltin(name)) {
@@ -547,7 +549,7 @@ public class PhoenixThemeEditorScreen extends Screen {
         }
 
         int sbW = sidebarW();
-        int canvasW = vw - sbW;
+        int canvasW = virtualWidth - sbW;
         int mockW = Math.min(canvasW - 20, 360);
         int mockX = 10;
         int itemH = 14;
@@ -555,7 +557,7 @@ public class PhoenixThemeEditorScreen extends Screen {
         List<String> vis = visibleThemes();
         int listY = listRowsStartY;
 
-        for (int i = scrollOffset; i < vis.size() && listY + itemH <= vh - 4; i++) {
+        for (int i = scrollOffset; i < vis.size() && listY + itemH <= virtualHeight - 4; i++) {
             String name = vis.get(i);
             if (my >= listY && my < listY + itemH) {
 
@@ -619,10 +621,10 @@ public class PhoenixThemeEditorScreen extends Screen {
         double mx = rmx / uiScale;
         double my = rmy / uiScale;
         int sbW = sidebarW();
-        if (mx < vw - sbW) {
+        if (mx < virtualWidth - sbW) {
             List<String> vis = visibleThemes();
             int itemH = 14;
-            int maxVis = Math.max(1, (vh - listRowsStartY - 6) / itemH);
+            int maxVis = Math.max(1, (virtualHeight - listRowsStartY - 6) / itemH);
             int maxScroll = Math.max(0, vis.size() - maxVis);
             scrollOffset = Mth.clamp(scrollOffset - (int) delta, 0, maxScroll);
             return true;
@@ -652,7 +654,7 @@ public class PhoenixThemeEditorScreen extends Screen {
     private void save() {
         String name = nameInput != null ? nameInput.getValue().trim().toUpperCase(Locale.ROOT) : "";
         if (name.isEmpty()) return;
-        PhoenixTheme copy = PhoenixTheme.current(ownerModId).copy();
+        var copy = PhoenixTheme.current(ownerModId).copy();
         PhoenixTheme.saveCustomTheme(name, copy);
         PhoenixTheme.setCurrent(ownerModId, name);
         savedSnap = makeSnap(PhoenixTheme.current(ownerModId), name);
@@ -747,7 +749,7 @@ public class PhoenixThemeEditorScreen extends Screen {
     public void renderBackground(@NotNull GuiGraphics g) {}
 
     private int sidebarW() {
-        return Math.max(SIDEBAR_MIN, vw / 4);
+        return Math.max(SIDEBAR_MIN, virtualWidth / 4);
     }
 
     private List<String> visibleThemes() {
