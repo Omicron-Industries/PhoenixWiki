@@ -23,7 +23,7 @@ public final class SyntaxHighlighter {
     private static final int TIP_COLOR = 0xFFAAFFAA;
 
     private static final Pattern CODE_ANNOTATION =
-            Pattern.compile("\\[([^\\[\\]]+)]\\((wiki:[^()]+|tip:[^()]+|https?://[^()\\s]+)\\)");
+            Pattern.compile("^\\[([^\\[\\]]+)]\\((wiki:[^()]+|tip:[^()]+|https?://[^()\\s]+)\\)");
 
     public record Token(String text, int color, RichSpan interactive) {
         public Token(String text, int color) {
@@ -38,40 +38,13 @@ public final class SyntaxHighlighter {
 
     public record HighlightResult(List<Token> tokens, LexerState endState) {}
 
-    /** Backwards-compatible overload for one-off line parsing. */
+    /** Backwards-compatible overload for single-line parsing. */
     public static List<Token> highlightLine(String lang, String line) {
         return highlightLine(lang, line, LexerState.NORMAL).tokens();
     }
 
     public static HighlightResult highlightLine(String lang, String line, LexerState initialState) {
-        List<Token> out = new ArrayList<>();
-        Matcher m = CODE_ANNOTATION.matcher(line);
-        int last = 0;
-        LexerState currentState = initialState;
-
-        while (m.find()) {
-            if (m.start() > last) {
-                var plainRes = highlightPlain(lang, line.substring(last, m.start()), currentState);
-                out.addAll(plainRes.tokens());
-                currentState = plainRes.endState();
-            }
-            String label = m.group(1);
-            String target = m.group(2);
-            if (target.startsWith("tip:")) {
-                out.add(new Token(label, TIP_COLOR, new RichSpan.Tip(label, Style.EMPTY, target.substring(4))));
-            } else {
-                out.add(new Token(label, LINK_COLOR, new RichSpan.Link(label, Style.EMPTY, target)));
-            }
-            last = m.end();
-        }
-
-        if (last < line.length()) {
-            var plainRes = highlightPlain(lang, line.substring(last), currentState);
-            out.addAll(plainRes.tokens());
-            currentState = plainRes.endState();
-        }
-
-        return new HighlightResult(out, currentState);
+        return highlightPlain(lang, line, initialState);
     }
 
     private static HighlightResult highlightPlain(String lang, String line, LexerState initialState) {
@@ -106,7 +79,6 @@ public final class SyntaxHighlighter {
                 continue;
             }
 
-            // 2. Multi-line Template Literal State
             if (state == LexerState.IN_TEMPLATE_LITERAL) {
                 flushPlain(buf, out);
                 int end = i;
@@ -132,6 +104,22 @@ public final class SyntaxHighlighter {
             }
 
             char c = line.charAt(i);
+
+            if (c == '[') {
+                Matcher m = CODE_ANNOTATION.matcher(line.substring(i));
+                if (m.find()) {
+                    flushPlain(buf, out);
+                    String label = m.group(1);
+                    String target = m.group(2);
+                    if (target.startsWith("tip:")) {
+                        out.add(new Token(label, TIP_COLOR, new RichSpan.Tip(label, Style.EMPTY, target.substring(4))));
+                    } else {
+                        out.add(new Token(label, LINK_COLOR, new RichSpan.Link(label, Style.EMPTY, target)));
+                    }
+                    i += m.end();
+                    continue;
+                }
+            }
 
             if (c == '/' && i + 1 < len) {
                 char next = line.charAt(i + 1);
@@ -184,8 +172,9 @@ public final class SyntaxHighlighter {
                     (Character.isLetter(line.charAt(i + 1)) || line.charAt(i + 1) == '_')) {
                 flushPlain(buf, out);
                 int start = i;
-                do i++;
-                while (i < len && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_'));
+                do {
+                    i++;
+                } while (i < len && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_'));
                 out.add(new Token(line.substring(start, i), ANNOTATION_COLOR));
                 continue;
             }
