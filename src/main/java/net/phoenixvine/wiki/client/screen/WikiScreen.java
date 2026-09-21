@@ -71,6 +71,7 @@ public class WikiScreen extends Screen {
     private final Set<String> collapsedChapters = new HashSet<>();
     private boolean tocOpen = true;
     private EditBox searchBox;
+    private boolean draggingScrollbar = false;
 
     private record SidebarEntry(boolean isHeader, String chapter, int pageIndex) {}
 
@@ -491,7 +492,7 @@ public class WikiScreen extends Screen {
         int visibleHeight = bottomBoundsY - topBoundsY;
         if (totalContentHeight <= visibleHeight) return;
 
-        int trackWidth = 2;
+        int trackWidth = 6;
         int scrollTrackLeft = rightMarginX - trackWidth;
 
         int thumbHeight = Math.max(16, (visibleHeight * visibleHeight) / totalContentHeight);
@@ -561,6 +562,25 @@ public class WikiScreen extends Screen {
         double mx = rmx / uiScale;
         double my = rmy / uiScale;
         if (btn == 0) {
+            int scrollRight = getScrollbarRightX();
+            int scrollTop = getScrollbarTopY();
+            int scrollBot = getScrollbarBottomY();
+            int visibleH = scrollBot - scrollTop;
+            int maxScroll = Math.max(0, cachedContentH - visibleH);
+
+            if (cachedContentH > visibleH && mx >= scrollRight - 6 && mx <= scrollRight && my >= scrollTop && my <= scrollBot) {
+                int thumbH = getScrollbarThumbHeight(visibleH, cachedContentH);
+                int thumbY = getScrollbarThumbY(scrollTop, visibleH, thumbH, scrollY, cachedContentH);
+
+                if (my >= thumbY && my <= thumbY + thumbH) {
+                    draggingScrollbar = true;
+                } else {
+                    double ratio = (my - scrollTop - (thumbH / 2.0)) / (visibleH - thumbH);
+                    scrollY = Math.max(0, Math.min(maxScroll, (int) (ratio * maxScroll)));
+                }
+                return true;
+            }
+
             for (RichSpan.Region r : tocRegions) {
                 if (r.contains(mx, my) && r.span() instanceof RichSpan.TocJump jump) {
                     if (jump.targetY() < 0) {
@@ -605,7 +625,7 @@ public class WikiScreen extends Screen {
                         jumpToPage(l.url().substring(5));
                     } else {
                         try {
-                           Util.getPlatform().openUri(URI.create(l.url()));
+                            Util.getPlatform().openUri(URI.create(l.url()));
                         } catch (Exception e) {
                             PhoenixWiki.LOGGER.warn(
                                     "PhoenixWiki: failed to open link '{}'", l.url(), e);
@@ -645,10 +665,26 @@ public class WikiScreen extends Screen {
     public boolean mouseDragged(double rmx, double rmy, int btn, double dragX, double dragY) {
         double mx = rmx / uiScale;
         double my = rmy / uiScale;
+
         if (draggingSidebar) {
             sidebarW = clampSidebarW((int) mx);
             return true;
         }
+
+        if (draggingScrollbar) {
+            int scrollTop = getScrollbarTopY();
+            int scrollBot = getScrollbarBottomY();
+            int visibleH = scrollBot - scrollTop;
+            int thumbH = getScrollbarThumbHeight(visibleH, cachedContentH);
+            int maxScroll = Math.max(0, cachedContentH - visibleH);
+
+            if (visibleH > thumbH) {
+                double ratio = (my - scrollTop - (thumbH / 2.0)) / (visibleH - thumbH);
+                scrollY = Math.max(0, Math.min(maxScroll, (int) (ratio * maxScroll)));
+            }
+            return true;
+        }
+
         return super.mouseDragged(mx, my, btn, dragX / uiScale, dragY / uiScale);
     }
 
@@ -657,6 +693,10 @@ public class WikiScreen extends Screen {
         if (draggingSidebar) {
             draggingSidebar = false;
             savedSidebarW = sidebarW;
+            return true;
+        }
+        if (draggingScrollbar) {
+            draggingScrollbar = false;
             return true;
         }
         return super.mouseReleased(rmx / uiScale, rmy / uiScale, btn);
@@ -673,6 +713,29 @@ public class WikiScreen extends Screen {
             return true;
         }
         return super.keyPressed(key, scan, mods);
+    }
+
+    private int getScrollbarRightX() {
+        return vw - MARGIN / 2;
+    }
+
+    private int getScrollbarTopY() {
+        return HEADER_H + MARGIN;
+    }
+
+    private int getScrollbarBottomY() {
+        return vh - FOOTER_H - MARGIN;
+    }
+
+    private int getScrollbarThumbHeight(int visibleHeight, int totalContentHeight) {
+        if (totalContentHeight <= visibleHeight) return visibleHeight;
+        return Math.max(16, (visibleHeight * visibleHeight) / totalContentHeight);
+    }
+
+    private int getScrollbarThumbY(int topBoundsY, int visibleHeight, int thumbHeight, int currentScrollY, int totalContentHeight) {
+        long maxScrollableDistance = totalContentHeight - visibleHeight;
+        if (maxScrollableDistance <= 0) return topBoundsY;
+        return topBoundsY + (int) ((long) currentScrollY * (visibleHeight - thumbHeight) / maxScrollableDistance);
     }
 
     @Override
