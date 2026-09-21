@@ -11,7 +11,10 @@ import net.phoenixvine.wiki.client.rich.render.RenderContext;
 import java.util.ArrayList;
 import java.util.List;
 
-
+/**
+ * Renders a fenced code block. Deliberately ignores {@link RenderContext#scale} - code blocks
+ * always render at native size, matching the pre-split behavior.
+ */
 public final class CodeBlockRenderer implements BlockRenderer<RichBlock.CodeBlock> {
 
     @Override
@@ -62,17 +65,17 @@ public final class CodeBlockRenderer implements BlockRenderer<RichBlock.CodeBloc
         int btnReserve = font.width("⎘") + 8 + 10;
         int firstLineW = Math.max(8, innerW - btnReserve);
         List<List<SyntaxHighlighter.Token>> visualLines = new ArrayList<>();
-        String[] rawLines = code.split("\n", -1);
-        for (int r = 0; r < rawLines.length; r++) {
+        List<List<SyntaxHighlighter.Token>> perRawLine = SyntaxHighlighter.highlightDocument(lang, code);
+        for (int r = 0; r < perRawLine.size(); r++) {
             int flw = (r == 0) ? firstLineW : -1;
-            visualLines.addAll(wrapHighlightedLine(font, SyntaxHighlighter.highlightLine(lang, rawLines[r]), innerW, flw));
+            visualLines.addAll(wrapHighlightedLine(font, perRawLine.get(r), innerW, flw));
         }
         return visualLines;
     }
 
     private static List<List<SyntaxHighlighter.Token>> wrapHighlightedLine(Font font,
-                                                                            List<SyntaxHighlighter.Token> tokens,
-                                                                            int maxW, int firstLineMaxW) {
+                                                                           List<SyntaxHighlighter.Token> tokens,
+                                                                           int maxW, int firstLineMaxW) {
         List<List<SyntaxHighlighter.Token>> lines = new ArrayList<>();
         List<SyntaxHighlighter.Token> current = new ArrayList<>();
         int curW = 0;

@@ -13,8 +13,11 @@ import net.minecraft.network.chat.Component;
 
 import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 public class MultilineTextArea extends AbstractWidget {
@@ -25,6 +28,11 @@ public class MultilineTextArea extends AbstractWidget {
     private static final int C_SEL_OUTLINE = 0xFF2255FF;
     private static final int C_HOVER_FILL = 0x33AAAAFF;
     private static final int C_HOVER_OUTLINE = 0x88AAAAFF;
+    private static final int C_SEARCH_FILL = 0x66FFDD55;
+    private static final int C_SEARCH_CURRENT_FILL = 0xAAFFAA00;
+    private static final int C_SCROLLBAR_TRACK = 0x33FFFFFF;
+    private static final int C_SCROLLBAR_THUMB = 0x99CCCCCC;
+    private static final int C_SCROLLBAR_THUMB_ACTIVE = 0xFFFFFFFF;
 
     private final Font font;
     private final MultilineTextField textField;
@@ -44,6 +52,195 @@ public class MultilineTextArea extends AbstractWidget {
 
     private String lastWrappedText = null;
     private int lastWrapWidth = -1;
+
+
+    private static final long UNDO_COALESCE_MS = 700;
+    private static final int MAX_UNDO = 200;
+
+    private record EditorState(String text, int cursor) {}
+
+    private final Deque<EditorState> undoStack = new ArrayDeque<>();
+    private final Deque<EditorState> redoStack = new ArrayDeque<>();
+    private long lastUndoPushTime = 0;
+
+    private void withUndoSnapshot(boolean coalesce, Runnable action) {
+        String before = textField.value();
+        int beforeCursor = textField.cursor();
+        action.run();
+        if (!textField.value().equals(before)) {
+            recordUndoState(before, beforeCursor, coalesce);
+        }
+    }
+
+    private boolean withUndoSnapshotBool(boolean coalesce, BooleanSupplier action) {
+        String before = textField.value();
+        int beforeCursor = textField.cursor();
+        boolean result = action.getAsBoolean();
+        if (!textField.value().equals(before)) {
+            recordUndoState(before, beforeCursor, coalesce);
+        }
+        return result;
+    }
+
+    private void recordUndoState(String text, int cursor, boolean coalesce) {
+        long now = System.currentTimeMillis();
+        if (coalesce && !undoStack.isEmpty() && now - lastUndoPushTime < UNDO_COALESCE_MS) {
+            lastUndoPushTime = now;
+            return;
+        }
+        undoStack.push(new EditorState(text, cursor));
+        if (undoStack.size() > MAX_UNDO) undoStack.removeLast();
+        lastUndoPushTime = now;
+        redoStack.clear();
+    }
+
+    public boolean canUndo() {
+        return !undoStack.isEmpty();
+    }
+
+    public boolean canRedo() {
+        return !redoStack.isEmpty();
+    }
+
+    public void undo() {
+        if (undoStack.isEmpty()) return;
+        EditorState state = undoStack.pop();
+        redoStack.push(new EditorState(textField.value(), textField.cursor()));
+        textField.setValue(state.text());
+        textField.seekCursor(Whence.ABSOLUTE, Math.min(state.cursor(), state.text().length()));
+        lastUndoPushTime = 0;
+        fireChanged();
+    }
+
+    public void redo() {
+        if (redoStack.isEmpty()) return;
+        EditorState state = redoStack.pop();
+        undoStack.push(new EditorState(textField.value(), textField.cursor()));
+        textField.setValue(state.text());
+        textField.seekCursor(Whence.ABSOLUTE, Math.min(state.cursor(), state.text().length()));
+        lastUndoPushTime = 0;
+        fireChanged();
+    }
+
+
+    private boolean searchActive = false;
+    private String searchQuery = "";
+    private final List<int[]> searchMatches = new ArrayList<>();
+    private int searchMatchIndex = -1;
+
+    public boolean isSearchActive() {
+        return searchActive;
+    }
+
+    private void toggleSearch() {
+        searchActive = !searchActive;
+        if (searchActive) {
+            updateSearchMatches();
+        } else {
+            searchMatches.clear();
+            searchMatchIndex = -1;
+        }
+    }
+
+    private void updateSearchMatches() {
+        searchMatches.clear();
+        searchMatchIndex = -1;
+        if (searchQuery.isEmpty()) return;
+        String hay = textField.value().toLowerCase();
+        String needle = searchQuery.toLowerCase();
+        int from = 0;
+        while (true) {
+            int idx = hay.indexOf(needle, from);
+            if (idx < 0) break;
+            searchMatches.add(new int[] { idx, idx + needle.length() });
+            from = idx + Math.max(1, needle.length());
+        }
+        if (searchMatches.isEmpty()) return;
+        int cursor = textField.cursor();
+        int best = 0;
+        for (int i = 0; i < searchMatches.size(); i++) {
+            if (searchMatches.get(i)[0] >= cursor) {
+                best = i;
+                break;
+            }
+        }
+        searchMatchIndex = best;
+        selectMatch(searchMatchIndex);
+    }
+
+    private void jumpToMatch(int dir) {
+        if (searchMatches.isEmpty()) return;
+        searchMatchIndex = Math.floorMod(searchMatchIndex + dir, searchMatches.size());
+        selectMatch(searchMatchIndex);
+    }
+
+    private void selectMatch(int idx) {
+        int[] m = searchMatches.get(idx);
+        textField.setSelecting(false);
+        textField.seekCursor(Whence.ABSOLUTE, m[0]);
+        textField.setSelecting(true);
+        textField.seekCursor(Whence.ABSOLUTE, m[1]);
+        textField.setSelecting(false);
+    }
+
+    private int[] searchBarBounds() {
+        if (!searchActive) return null;
+        String label = "Find: " + searchQuery;
+        int barW = Math.max(120, font.width(label) + 70);
+        int barH = 14;
+        int barX = getX() + width - barW - 4;
+        int barY = getY() + 4;
+        return new int[] { barX, barY, barW, barH };
+    }
+
+    private void renderSearchBar(GuiGraphics g) {
+        int[] b = searchBarBounds();
+        if (b == null) return;
+        int barX = b[0], barY = b[1], barW = b[2], barH = b[3];
+        g.fill(barX, barY, barX + barW, barY + barH, 0xEE1A1624);
+        drawBorder(g, barX, barY, barW, barH, C_ACCENT);
+        boolean caretOn = (System.currentTimeMillis() / 530) % 2 == 0;
+        g.drawString(font, "Find: " + searchQuery + (caretOn ? "_" : ""), barX + 4, barY + 3, 0xFFFFFFFF, false);
+        String countText = searchQuery.isEmpty() ? ""
+                : searchMatches.isEmpty() ? "0/0" : (searchMatchIndex + 1) + "/" + searchMatches.size();
+        if (!countText.isEmpty()) {
+            g.drawString(font, countText, barX + barW - 4 - font.width(countText), barY + 3,
+                    searchMatches.isEmpty() ? 0xFFFF6666 : 0xFFAAAAAA, false);
+        }
+    }
+
+
+    private static final int SCROLLBAR_HIT_PAD = 3;
+
+    private boolean draggingScrollbar = false;
+    private double scrollbarGrabOffset = 0;
+
+    private record ScrollbarGeom(int trackX, int trackTop, int trackH, int thumbH, int thumbY, int maxScroll) {}
+
+    private ScrollbarGeom scrollbarGeom() {
+        int visLines = Math.max(1, (height - 6) / 9);
+        int maxScroll = Math.max(0, lines.size() - visLines);
+        if (maxScroll <= 0) return null;
+        int trackX = getX() + width - 3;
+        int trackTop = getY() + 2, trackBot = getY() + height - 2;
+        int trackH = trackBot - trackTop;
+        int thumbH = Math.max(10, trackH * visLines / (visLines + maxScroll));
+        int thumbY = trackTop + (int) ((long) scrollLines * (trackH - thumbH) / maxScroll);
+        return new ScrollbarGeom(trackX, trackTop, trackH, thumbH, thumbY, maxScroll);
+    }
+
+    private boolean isInScrollbarHitZone(double mx, ScrollbarGeom sb) {
+        return mx >= sb.trackX() - SCROLLBAR_HIT_PAD && mx < sb.trackX() + 2 + SCROLLBAR_HIT_PAD;
+    }
+
+    private void setScrollFromThumbY(double my, ScrollbarGeom sb) {
+        double grabbedThumbY = my - scrollbarGrabOffset;
+        double range = Math.max(1, sb.trackH() - sb.thumbH());
+        double frac = (grabbedThumbY - sb.trackTop()) / range;
+        frac = Math.max(0.0, Math.min(1.0, frac));
+        scrollLines = (int) Math.round(frac * sb.maxScroll());
+    }
+
 
     private static void drawBorder(GuiGraphics g, int x, int y, int w, int h, int color) {
         g.fill(x, y, x + w, y + 1, color);
@@ -65,6 +262,8 @@ public class MultilineTextArea extends AbstractWidget {
             v = v.replace("\r\n", "\n").replace("\r", "\n");
         }
         textField.setValue(v == null ? "" : v);
+        undoStack.clear();
+        redoStack.clear();
     }
 
     public void seekToStart() {
@@ -103,21 +302,23 @@ public class MultilineTextArea extends AbstractWidget {
     }
 
     public void forceInsert(String text) {
-        String full = textField.value();
-        int cursor = textField.cursor();
-        int start = cursor, end = cursor;
-        if (textField.hasSelection()) {
-            String sel = textField.getSelectedText();
-            int[] bounds = selectionBounds(full, sel);
-            start = bounds[0];
-            end = bounds[1];
-        }
-        String updated = full.substring(0, start) + text + full.substring(end);
-        if (updated.length() <= maxLength) {
-            textField.setValue(updated);
-            textField.seekCursor(Whence.ABSOLUTE, start + text.length());
-            fireChanged();
-        }
+        withUndoSnapshot(false, () -> {
+            String full = textField.value();
+            int cursor = textField.cursor();
+            int start = cursor, end = cursor;
+            if (textField.hasSelection()) {
+                String sel = textField.getSelectedText();
+                int[] bounds = selectionBounds(full, sel);
+                start = bounds[0];
+                end = bounds[1];
+            }
+            String updated = full.substring(0, start) + text + full.substring(end);
+            if (updated.length() <= maxLength) {
+                textField.setValue(updated);
+                textField.seekCursor(Whence.ABSOLUTE, start + text.length());
+                fireChanged();
+            }
+        });
     }
 
     @Override
@@ -185,7 +386,7 @@ public class MultilineTextArea extends AbstractWidget {
             }
         }
 
-        if (cursor != lastCursorForScroll) {
+        if (!draggingScrollbar && cursor != lastCursorForScroll) {
             if (cursorLine < scrollLines) scrollLines = cursorLine;
             if (cursorLine >= scrollLines + visibleLines) scrollLines = cursorLine - visibleLines + 1;
             lastCursorForScroll = cursor;
@@ -238,6 +439,24 @@ public class MultilineTextArea extends AbstractWidget {
             }
         }
 
+        if (searchActive && !searchMatches.isEmpty()) {
+            for (int i = 0; i < lines.size(); i++) {
+                LinePos line = lines.get(i);
+                int lineY = textY + (i - scrollLines) * 9;
+                for (int m = 0; m < searchMatches.size(); m++) {
+                    int[] match = searchMatches.get(m);
+                    if (match[1] > line.start && match[0] < line.end) {
+                        int a = Math.max(match[0], line.start) - line.start;
+                        int b = Math.min(match[1], line.end) - line.start;
+                        int x1 = textX + font.width(line.text.substring(0, a));
+                        int x2 = textX + font.width(line.text.substring(0, b));
+                        g.fill(x1, lineY, x2, lineY + 9, m == searchMatchIndex ? C_SEARCH_CURRENT_FILL
+                                : C_SEARCH_FILL);
+                    }
+                }
+            }
+        }
+
         for (int i = 0; i < lines.size(); i++) {
             LinePos line = lines.get(i);
             int lineY = textY + (i - scrollLines) * 9;
@@ -255,15 +474,15 @@ public class MultilineTextArea extends AbstractWidget {
         }
         g.disableScissor();
 
-        int sbVisLines = Math.max(1, (height - 6) / 9);
-        int sbMaxScroll = Math.max(0, lines.size() - sbVisLines);
-        if (sbMaxScroll > 0) {
-            int trackX = getX() + width - 3;
-            int trackTop = getY() + 2, trackBot = getY() + height - 2, trackH = trackBot - trackTop;
-            g.fill(trackX, trackTop, trackX + 2, trackBot, 0x33FFFFFF);
-            int thumbH = Math.max(10, trackH * sbVisLines / (sbVisLines + sbMaxScroll));
-            int thumbY = trackTop + (int) ((long) scrollLines * (trackH - thumbH) / sbMaxScroll);
-            g.fill(trackX, thumbY, trackX + 2, thumbY + thumbH, 0x99CCCCCC);
+        ScrollbarGeom sb = scrollbarGeom();
+        if (sb != null) {
+            g.fill(sb.trackX(), sb.trackTop(), sb.trackX() + 2, sb.trackTop() + sb.trackH(), C_SCROLLBAR_TRACK);
+            g.fill(sb.trackX(), sb.thumbY(), sb.trackX() + 2, sb.thumbY() + sb.thumbH(),
+                    draggingScrollbar ? C_SCROLLBAR_THUMB_ACTIVE : C_SCROLLBAR_THUMB);
+        }
+
+        if (searchActive) {
+            renderSearchBar(g);
         }
     }
 
@@ -323,6 +542,27 @@ public class MultilineTextArea extends AbstractWidget {
     public boolean mouseClicked(double mx, double my, int btn) {
         if (mx >= getX() && mx < getX() + width && my >= getY() && my < getY() + height) {
             setFocused(true);
+
+            if (btn == 0) {
+                int[] sbar = searchBarBounds();
+                if (sbar != null && mx >= sbar[0] && mx < sbar[0] + sbar[2] && my >= sbar[1] && my < sbar[1] + sbar[3]) {
+                    return true;
+                }
+
+                ScrollbarGeom sb = scrollbarGeom();
+                if (sb != null && isInScrollbarHitZone(mx, sb)) {
+                    if (my >= sb.thumbY() && my < sb.thumbY() + sb.thumbH()) {
+                        draggingScrollbar = true;
+                        scrollbarGrabOffset = my - sb.thumbY();
+                    } else {
+                        draggingScrollbar = true;
+                        scrollbarGrabOffset = sb.thumbH() / 2.0;
+                        setScrollFromThumbY(my, sb);
+                    }
+                    return true;
+                }
+            }
+
             if (btn == 0 && !lines.isEmpty()) {
                 textField.setSelecting(false);
                 textField.seekCursor(Whence.ABSOLUTE, charIndexAt(mx, my));
@@ -335,6 +575,11 @@ public class MultilineTextArea extends AbstractWidget {
 
     @Override
     public boolean mouseDragged(double mx, double my, int btn, double dx, double dy) {
+        if (btn == 0 && draggingScrollbar) {
+            ScrollbarGeom sb = scrollbarGeom();
+            if (sb != null) setScrollFromThumbY(my, sb);
+            return true;
+        }
         if (btn == 0 && isFocused() && !lines.isEmpty()) {
             textField.setSelecting(true);
             textField.seekCursor(Whence.ABSOLUTE, charIndexAt(mx, my));
@@ -344,14 +589,55 @@ public class MultilineTextArea extends AbstractWidget {
     }
 
     @Override
+    public boolean mouseReleased(double mx, double my, int btn) {
+        if (btn == 0 && draggingScrollbar) {
+            draggingScrollbar = false;
+            return true;
+        }
+        return super.mouseReleased(mx, my, btn);
+    }
+
+    @Override
     public boolean keyPressed(int kc, int sc, int mod) {
         if (!isFocused()) return false;
+
+        if (Screen.hasControlDown() && kc == GLFW.GLFW_KEY_F) {
+            toggleSearch();
+            return true;
+        }
+
+        if (searchActive) {
+            if (kc == GLFW.GLFW_KEY_ESCAPE) {
+                toggleSearch();
+                return true;
+            }
+            if (kc == GLFW.GLFW_KEY_ENTER || kc == GLFW.GLFW_KEY_KP_ENTER) {
+                jumpToMatch(Screen.hasShiftDown() ? -1 : 1);
+                return true;
+            }
+            if (kc == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!searchQuery.isEmpty()) {
+                    searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
+                    updateSearchMatches();
+                }
+                return true;
+            }
+            return true;
+        }
 
         if (kc == GLFW.GLFW_KEY_ENTER || kc == GLFW.GLFW_KEY_KP_ENTER) {
             this.forceInsert("\n");
             return true;
         }
         if (Screen.hasControlDown()) {
+            if (kc == GLFW.GLFW_KEY_Z && !Screen.hasShiftDown()) {
+                undo();
+                return true;
+            }
+            if (kc == GLFW.GLFW_KEY_Y || (kc == GLFW.GLFW_KEY_Z && Screen.hasShiftDown())) {
+                redo();
+                return true;
+            }
             if (kc == GLFW.GLFW_KEY_C) {
                 if (textField.hasSelection()) {
                     Minecraft.getInstance().keyboardHandler.setClipboard(textField.getSelectedText());
@@ -373,7 +659,7 @@ public class MultilineTextArea extends AbstractWidget {
                 return true;
             }
         }
-        if (textField.keyPressed(kc)) {
+        if (withUndoSnapshotBool(true, () -> textField.keyPressed(kc))) {
             fireChanged();
             return true;
         }
@@ -382,12 +668,18 @@ public class MultilineTextArea extends AbstractWidget {
 
     @Override
     public boolean charTyped(char ch, int mods) {
-        if (isFocused() && SharedConstants.isAllowedChatCharacter(ch)) {
-            textField.insertText(Character.toString(ch));
-            fireChanged();
+        if (!isFocused()) return false;
+        if (!SharedConstants.isAllowedChatCharacter(ch)) return false;
+
+        if (searchActive) {
+            searchQuery += ch;
+            updateSearchMatches();
             return true;
         }
-        return false;
+
+        withUndoSnapshot(true, () -> textField.insertText(Character.toString(ch)));
+        fireChanged();
+        return true;
     }
 
     @Override

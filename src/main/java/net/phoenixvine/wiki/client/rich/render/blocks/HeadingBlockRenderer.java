@@ -11,12 +11,15 @@ import java.util.List;
 
 public final class HeadingBlockRenderer implements BlockRenderer<RichBlock.Heading> {
 
+    private static final int BAR_OFFSET = 3;
+    private static final int BAR_THICKNESS = 1;
+
     @Override
     public int measure(RenderContext ctx, RichBlock.Heading block, int y, int maxW) {
         List<RichSpan> styled = styledSpans(block.level(), block.spans());
         y = SpanRenderer.measureSpanListFrom(ctx.font, styled, maxW, y,
                 ctx.scale * SpanRenderer.headingScale(block.level()));
-        return y + SpanRenderer.GAP_HEADING_AFTER;
+        return afterHeadingY(y, block.level());
     }
 
     @Override
@@ -31,6 +34,7 @@ public final class HeadingBlockRenderer implements BlockRenderer<RichBlock.Headi
         return block.level() <= 2 ? SpanRenderer.GAP_HEADING_BEFORE : SpanRenderer.GAP_HEADING_BEFORE - 3;
     }
 
+
     public static void renderHeadingLike(RenderContext ctx, int level, List<RichSpan> spans, int x, int[] curY,
                                          int maxW) {
         GuiGraphics g = ctx.g;
@@ -40,12 +44,18 @@ public final class HeadingBlockRenderer implements BlockRenderer<RichBlock.Headi
         SpanRenderer.renderSpanList(g, ctx.font, styled, x, curY, x, maxW, ctx.clipTop, ctx.clipBot, ctx.regions,
                 hScale);
         if (level <= 1) {
-            int barY = curY[0] + 3;
-            if (barY + 1 >= ctx.clipTop && headY <= ctx.clipBot) {
-                g.fill(x, barY, x + maxW, barY + 1, ctx.accentColor);
+            int barY = curY[0] + BAR_OFFSET;
+            if (barY + BAR_THICKNESS >= ctx.clipTop && headY <= ctx.clipBot) {
+                g.fill(x, barY, x + maxW, barY + BAR_THICKNESS, ctx.accentColor);
             }
         }
-        curY[0] += SpanRenderer.GAP_HEADING_AFTER;
+        curY[0] = afterHeadingY(curY[0], level);
+    }
+
+
+    static int afterHeadingY(int textBottomY, int level) {
+        int y = level <= 1 ? textBottomY + BAR_OFFSET + BAR_THICKNESS : textBottomY;
+        return y + SpanRenderer.GAP_HEADING_AFTER;
     }
 
     static List<RichSpan> styledSpans(int level, List<RichSpan> spans) {

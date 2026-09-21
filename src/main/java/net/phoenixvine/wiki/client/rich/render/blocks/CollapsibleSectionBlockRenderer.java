@@ -17,7 +17,7 @@ public final class CollapsibleSectionBlockRenderer implements BlockRenderer<Rich
         List<RichSpan> styled = HeadingBlockRenderer.styledSpans(block.level(), block.headingSpans());
         y = SpanRenderer.measureSpanListFrom(ctx.font, styled, maxW, y,
                 ctx.scale * SpanRenderer.headingScale(block.level()));
-        y += SpanRenderer.GAP_HEADING_AFTER;
+        y = HeadingBlockRenderer.afterHeadingY(y, block.level());
         if (!ctx.expandedKeys.contains(collapseTrackingKey(block.collapseKey()))) {
             y = ctx.measureBlockList(block.children(), y, maxW);
         }
