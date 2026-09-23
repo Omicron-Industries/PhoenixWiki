@@ -91,8 +91,16 @@ public class SuiteHudSettingsScreen extends Screen {
             y += ROW_H;
         }
 
+        this.addRenderableWidget(Button.builder(Component.literal("§7Reset positions"), b -> {
+                    SuiteHudBar.resetAllButtonPositions();
+                    this.init();
+                })
+                .bounds(panelX + 20, panelY + panelH - FOOTER_H + 6, 110, 16)
+                .tooltip(Tooltip.create(Component.literal("Put every dragged HUD button back in its default spot")))
+                .build());
+
         this.addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose())
-                .bounds(panelX + panelW / 2 - 40, panelY + panelH - FOOTER_H + 6, 80, 16)
+                .bounds(panelX + panelW - 100, panelY + panelH - FOOTER_H + 6, 80, 16)
                 .build());
     }
 

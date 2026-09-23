@@ -122,6 +122,15 @@ public final class SuiteHudBar {
         return Math.round(BTN_SIZE * SuiteHudConfig.getEffectiveScale(modId));
     }
 
+    /** Puts every button back in its natural grid slot and forgets any in-flight drag/undo state
+     *  tied to the positions being cleared. */
+    public static void resetAllButtonPositions() {
+        SuiteHudConfig.clearAllButtonAnchors();
+        UNDO_STACK.clear();
+        draggingKey = null;
+        dragStartAnchor = null;
+    }
+
     private static String keyFor(String modId, int index, int count) {
         return count > 1 ? modId + "#" + index : modId;
     }

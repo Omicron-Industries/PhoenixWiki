@@ -168,6 +168,15 @@ public final class SuiteHudConfig {
         }
     }
 
+    /** Clears every custom-dragged button position, returning all buttons to the natural grid. */
+    public static void clearAllButtonAnchors() {
+        synchronized (LOCK) {
+            ensureLoaded();
+            data.buttonAnchor.clear();
+            save();
+        }
+    }
+
     private static void save() {
         try {
             File f = file();
