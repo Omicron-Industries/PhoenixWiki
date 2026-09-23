@@ -2,9 +2,7 @@ package net.phoenixvine.wiki.client.rich.render;
 
 import net.phoenixvine.wiki.client.rich.RichBlock;
 
-
 public interface BlockRenderer<T extends RichBlock> {
-
 
     int measure(RenderContext ctx, T block, int y, int maxW);
 

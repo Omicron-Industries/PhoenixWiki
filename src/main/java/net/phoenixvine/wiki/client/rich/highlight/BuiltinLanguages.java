@@ -2,8 +2,6 @@ package net.phoenixvine.wiki.client.rich.highlight;
 
 import java.util.Set;
 
-/** The languages the wiki understands out of the box. Add more via {@link LanguageRegistry#register}
- *  instead of editing this class. */
 final class BuiltinLanguages {
 
     private BuiltinLanguages() {}
@@ -44,14 +42,12 @@ final class BuiltinLanguages {
 
         LanguageRegistry.register(new LanguageDefinition(Set.of("true", "false", "null"), false, false), "json");
 
-        // C
         LanguageRegistry.register(new LanguageDefinition(Set.of(
                 "auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum",
                 "extern", "float", "for", "goto", "if", "int", "long", "register", "return", "short", "signed",
                 "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"
         ), true, true), "c");
 
-        // C#
         LanguageDefinition csharp = new LanguageDefinition(Set.of(
                 "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class",
                 "const", "continue", "decimal", "default", "delegate", "do", "double", "else", "enum", "event",
@@ -65,7 +61,6 @@ final class BuiltinLanguages {
         ), true, true);
         LanguageRegistry.register(csharp, "cs", "csharp");
 
-        // Rust
         LanguageDefinition rust = new LanguageDefinition(Set.of(
                 "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
                 "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
@@ -74,7 +69,6 @@ final class BuiltinLanguages {
         ), true, true);
         LanguageRegistry.register(rust, "rs", "rust");
 
-        // Python
         LanguageRegistry.register(new LanguageDefinition(Set.of(
                 "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue",
                 "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import",
@@ -82,7 +76,6 @@ final class BuiltinLanguages {
                 "with", "yield"
         ), true, false), "py", "python");
 
-        // Hot Chocolate (hc/hotc)
         LanguageRegistry.register(new LanguageDefinition(Set.of(
                 "fn", "struct", "let", "var", "if", "else", "while", "for", "in", "return", "true", "false",
                 "impl", "mut", "arena", "component", "resource", "system", "interface", "dyn", "enum", "match",

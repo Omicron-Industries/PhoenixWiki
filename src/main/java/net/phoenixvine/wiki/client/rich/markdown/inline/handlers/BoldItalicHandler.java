@@ -3,7 +3,6 @@ package net.phoenixvine.wiki.client.rich.markdown.inline.handlers;
 import net.phoenixvine.wiki.client.rich.markdown.inline.InlineHandler;
 import net.phoenixvine.wiki.client.rich.markdown.inline.InlineParseState;
 
-
 public final class BoldItalicHandler implements InlineHandler {
 
     @Override

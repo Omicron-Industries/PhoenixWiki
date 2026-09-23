@@ -53,7 +53,6 @@ public class MultilineTextArea extends AbstractWidget {
     private String lastWrappedText = null;
     private int lastWrapWidth = -1;
 
-
     private static final long UNDO_COALESCE_MS = 700;
     private static final int MAX_UNDO = 200;
 
@@ -121,7 +120,6 @@ public class MultilineTextArea extends AbstractWidget {
         lastUndoPushTime = 0;
         fireChanged();
     }
-
 
     private boolean searchActive = false;
     private String searchQuery = "";
@@ -209,7 +207,6 @@ public class MultilineTextArea extends AbstractWidget {
         }
     }
 
-
     private static final int SCROLLBAR_HIT_PAD = 3;
 
     private boolean draggingScrollbar = false;
@@ -240,7 +237,6 @@ public class MultilineTextArea extends AbstractWidget {
         frac = Math.max(0.0, Math.min(1.0, frac));
         scrollLines = (int) Math.round(frac * sb.maxScroll());
     }
-
 
     private static void drawBorder(GuiGraphics g, int x, int y, int w, int h, int color) {
         g.fill(x, y, x + w, y + 1, color);

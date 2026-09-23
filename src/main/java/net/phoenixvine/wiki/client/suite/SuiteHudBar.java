@@ -16,9 +16,13 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.phoenixvine.wiki.PhoenixWiki;
 import net.phoenixvine.wiki.theme.PhoenixTheme;
+import org.jetbrains.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
@@ -44,25 +48,20 @@ public final class SuiteHudBar {
     private static final int MARGIN = 4;
     private static final int GRID_ROWS = 3;
 
-    // Other mods (FTB Library/Quests, etc.) sometimes draw their own HUD toggle in the same
-    // top-left corner, and there's no API to ask any of them for their bounds -- so instead of
-    // guessing which mods to avoid, the whole bar is just middle-click-draggable (see
-    // onScreenMouseDrag below) and remembers wherever the player drops it. barX()/barY() expose
-    // the live position so EMI's exclusion zone (see ChroniclesEmiPlugin) tracks it too.
-    private static int leftMargin() {
-        return MARGIN + SuiteHudConfig.getOffsetX();
-    }
-
-    private static int topMargin() {
-        return MARGIN + SuiteHudConfig.getOffsetY();
-    }
-
     public static int barX() {
-        return leftMargin();
+        List<HudSlot> slots = computeLayout();
+        if (slots.isEmpty()) return MARGIN;
+        int minX = Integer.MAX_VALUE;
+        for (HudSlot s : slots) minX = Math.min(minX, s.x());
+        return minX;
     }
 
     public static int barY() {
-        return topMargin();
+        List<HudSlot> slots = computeLayout();
+        if (slots.isEmpty()) return MARGIN;
+        int minY = Integer.MAX_VALUE;
+        for (HudSlot s : slots) minY = Math.min(minY, s.y());
+        return minY;
     }
 
     private record Entry(String modId, int priority, ResourceLocation icon, Supplier<Component> tooltip,
@@ -117,15 +116,23 @@ public final class SuiteHudBar {
 
     public static void setButtonEnabled(String modId, boolean enabled) { SuiteHudConfig.setEnabled(modId, enabled); }
 
-    private record HudSlot(Entry entry, boolean isSettings, int x, int y, int size) {}
+    private record HudSlot(Entry entry, boolean isSettings, String key, int x, int y, int size) {}
 
     private static int sizeFor(String modId) {
         return Math.round(BTN_SIZE * SuiteHudConfig.getEffectiveScale(modId));
     }
 
+    private static String keyFor(String modId, int index, int count) {
+        return count > 1 ? modId + "#" + index : modId;
+    }
+
+    private static int clampToScreen(int v, int screenDim, int size) {
+        return Math.max(0, Math.min(v, Math.max(0, screenDim - size)));
+    }
+
     private static List<HudSlot> computeLayout() {
         synchronized (LOCK) {
-            List<String> ids = new ArrayList<>();
+            List<String> keys = new ArrayList<>();
             List<Entry> owners = new ArrayList<>();
             List<Integer> sizes = new ArrayList<>();
             for (Entry e : ENTRIES) {
@@ -133,7 +140,7 @@ public final class SuiteHudBar {
                 int size = sizeFor(e.modId());
                 int count = Math.max(0, e.slotCount().getAsInt());
                 for (int i = 0; i < count; i++) {
-                    ids.add(e.modId());
+                    keys.add(keyFor(e.modId(), i, count));
                     owners.add(e);
                     sizes.add(size);
                 }
@@ -141,6 +148,7 @@ public final class SuiteHudBar {
 
             boolean showSettings = !ENTRIES.isEmpty();
             if (showSettings) {
+                keys.add(SETTINGS_ID);
                 owners.add(null);
                 sizes.add(sizeFor(SETTINGS_ID));
             }
@@ -160,25 +168,44 @@ public final class SuiteHudBar {
             }
 
             int[] colX = new int[cols];
-            int cx = leftMargin();
+            int cx = MARGIN;
             for (int c = 0; c < cols; c++) {
                 colX[c] = cx;
                 cx += colW[c] + GAP;
             }
             int[] rowY = new int[rows];
-            int cy = topMargin();
+            int cy = MARGIN;
             for (int r = 0; r < rows; r++) {
                 rowY[r] = cy;
                 cy += rowH[r] + GAP;
             }
 
+            var window = Minecraft.getInstance().getWindow();
+            int screenW = window.getGuiScaledWidth();
+            int screenH = window.getGuiScaledHeight();
+
             for (int idx = 0; idx < n; idx++) {
                 int col = idx / GRID_ROWS, row = idx % GRID_ROWS;
                 int size = sizes.get(idx);
-                int x = colX[col] + (colW[col] - size) / 2;
-                int y = rowY[row] + (rowH[row] - size) / 2;
+
+                String key = keys.get(idx);
+                int[] anchor = SuiteHudConfig.getButtonAnchor(key);
+                int x, y;
+                if (anchor != null) {
+
+                    x = anchor[0] == 1 ? screenW - anchor[1] - size : anchor[1];
+                    y = anchor[2] == 1 ? screenH - anchor[3] - size : anchor[3];
+                    x = clampToScreen(x, screenW, size);
+                    y = clampToScreen(y, screenH, size);
+                } else {
+                    int baseX = colX[col] + (colW[col] - size) / 2;
+                    int baseY = rowY[row] + (rowH[row] - size) / 2;
+                    x = clampToScreen(baseX, screenW, size);
+                    y = clampToScreen(baseY, screenH, size);
+                }
+
                 Entry owner = owners.get(idx);
-                slots.add(new HudSlot(owner, owner == null, x, y, size));
+                slots.add(new HudSlot(owner, owner == null, key, x, y, size));
             }
             return slots;
         }
@@ -219,24 +246,21 @@ public final class SuiteHudBar {
         return null;
     }
 
-    /** The bar's own bounding box, independent of {@link #barWidth}/{@link #barHeight}'s
-     *  "absolute right/bottom edge" semantics (those are sized for the EMI exclusion zone) --
-     *  used so a middle-click anywhere between icons, not just exactly on one, starts a drag. */
-    private static boolean withinBar(List<HudSlot> slots, double mx, double my) {
-        if (slots.isEmpty()) return false;
-        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, maxX = 0, maxY = 0;
-        for (HudSlot s : slots) {
-            minX = Math.min(minX, s.x());
-            minY = Math.min(minY, s.y());
-            maxX = Math.max(maxX, s.x() + s.size());
-            maxY = Math.max(maxY, s.y() + s.size());
-        }
-        return mx >= minX && mx < maxX && my >= minY && my < maxY;
-    }
+    private static String draggingKey = null;
+    private static int dragGrabX, dragGrabY;
+    @Nullable
+    private static int[] dragStartAnchor;
 
-    private static boolean dragging = false;
-    private static double dragStartMx, dragStartMy;
-    private static int dragStartOffsetX, dragStartOffsetY;
+    private static final int MAX_UNDO = 20;
+
+    private record UndoEntry(String key, int @Nullable [] prevAnchor) {}
+
+    private static final Deque<UndoEntry> UNDO_STACK = new ArrayDeque<>();
+
+    private static boolean anchorEquals(int @Nullable [] a, int @Nullable [] b) {
+        if (a == null || b == null) return a == b;
+        return java.util.Arrays.equals(a, b);
+    }
 
     private static void draw(GuiGraphics g, Minecraft mc, double hoverMx, double hoverMy) {
         var theme = PhoenixTheme.current();
@@ -328,18 +352,17 @@ public final class SuiteHudBar {
 
         List<HudSlot> slots = computeLayout();
 
-        if (event.getButton() == 2 && withinBar(slots, event.getMouseX(), event.getMouseY())) {
-            dragging = true;
-            dragStartMx = event.getMouseX();
-            dragStartMy = event.getMouseY();
-            dragStartOffsetX = SuiteHudConfig.getOffsetX();
-            dragStartOffsetY = SuiteHudConfig.getOffsetY();
+        HudSlot hit = slotAt(slots, event.getMouseX(), event.getMouseY());
+        if (hit == null) return;
+
+        if (event.getButton() == 2) {
+            draggingKey = hit.key();
+            dragGrabX = (int) Math.round(event.getMouseX()) - hit.x();
+            dragGrabY = (int) Math.round(event.getMouseY()) - hit.y();
+            dragStartAnchor = SuiteHudConfig.getButtonAnchor(draggingKey);
             event.setCanceled(true);
             return;
         }
-
-        HudSlot hit = slotAt(slots, event.getMouseX(), event.getMouseY());
-        if (hit == null) return;
 
         event.setCanceled(true);
         if (hit.isSettings()) {
@@ -356,24 +379,56 @@ public final class SuiteHudBar {
 
     @SubscribeEvent
     public static void onScreenMouseDrag(ScreenEvent.MouseDragged.Pre event) {
-        if (!dragging) return;
+        if (draggingKey == null) return;
         event.setCanceled(true);
 
-        Screen screen = event.getScreen();
-        int newOffsetX = dragStartOffsetX + (int) Math.round(event.getMouseX() - dragStartMx);
-        int newOffsetY = dragStartOffsetY + (int) Math.round(event.getMouseY() - dragStartMy);
-        // Loose safety clamp -- keeps the drag handle from being dropped somewhere you can no
-        // longer reach it, without needing to know the bar's exact size mid-drag.
-        newOffsetX = Math.max(0, Math.min(screen.width - BTN_SIZE - MARGIN, newOffsetX));
-        newOffsetY = Math.max(0, Math.min(screen.height - BTN_SIZE - MARGIN, newOffsetY));
-        SuiteHudConfig.setOffsetLive(newOffsetX, newOffsetY);
+        var window = Minecraft.getInstance().getWindow();
+        int screenW = window.getGuiScaledWidth();
+        int screenH = window.getGuiScaledHeight();
+        int size = sizeForKey(draggingKey);
+
+        int px = (int) Math.round(event.getMouseX()) - dragGrabX;
+        int py = (int) Math.round(event.getMouseY()) - dragGrabY;
+
+        boolean anchorRight = px + size / 2 > screenW / 2;
+        boolean anchorBottom = py + size / 2 > screenH / 2;
+        int distX = anchorRight ? screenW - px - size : px;
+        int distY = anchorBottom ? screenH - py - size : py;
+        SuiteHudConfig.setButtonAnchorLive(draggingKey, anchorRight, distX, anchorBottom, distY);
+    }
+
+    private static int sizeForKey(String key) {
+        int hashIdx = key.indexOf('#');
+        return sizeFor(hashIdx < 0 ? key : key.substring(0, hashIdx));
     }
 
     @SubscribeEvent
     public static void onScreenMouseRelease(ScreenEvent.MouseButtonReleased.Pre event) {
-        if (!dragging || event.getButton() != 2) return;
-        dragging = false;
-        SuiteHudConfig.commitOffset();
+        if (draggingKey == null || event.getButton() != 2) return;
+        String key = draggingKey;
+        int[] startAnchor = dragStartAnchor;
+        draggingKey = null;
+        dragStartAnchor = null;
+
+        int[] finalAnchor = SuiteHudConfig.getButtonAnchor(key);
+        if (!anchorEquals(startAnchor, finalAnchor)) {
+            if (UNDO_STACK.size() >= MAX_UNDO) UNDO_STACK.removeFirst();
+            UNDO_STACK.addLast(new UndoEntry(key, startAnchor));
+        }
+        SuiteHudConfig.commitButtonAnchor(key, finalAnchor);
+        event.setCanceled(true);
+    }
+
+    @SubscribeEvent
+    public static void onScreenKeyPressed(ScreenEvent.KeyPressed.Pre event) {
+        var mc = Minecraft.getInstance();
+        Screen screen = event.getScreen();
+        if (mc.player == null || entriesEmpty() || screenWantsBar(screen)) return;
+        if (event.getKeyCode() != GLFW.GLFW_KEY_Z || !Screen.hasControlDown()) return;
+        if (UNDO_STACK.isEmpty()) return;
+
+        UndoEntry last = UNDO_STACK.removeLast();
+        SuiteHudConfig.commitButtonAnchor(last.key(), last.prevAnchor());
         event.setCanceled(true);
     }
 }

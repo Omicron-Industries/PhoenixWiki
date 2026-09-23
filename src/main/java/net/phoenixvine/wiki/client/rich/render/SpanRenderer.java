@@ -171,9 +171,7 @@ public final class SpanRenderer {
                 curX = pos[0];
                 curY[0] = pos[1];
             } else if (span instanceof RichSpan.ConditionalTip t) {
-                // Never resolved here -- the engine has no condition system of its own. Renders
-                // as plain, non-interactive styled text (no Region) unless the caller has already
-                // walked the tree and replaced this with a concrete Tip/Text before render.
+
                 Style ts = t.style().withColor(TIP_COLOR);
                 int[] pos = renderWords(g, font, t.label(), ts, TIP_COLOR,
                         curX, curY[0], originX, maxW, clipTop, clipBot, regions, null, scale);

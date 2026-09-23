@@ -11,10 +11,6 @@ import net.phoenixvine.wiki.client.rich.render.RenderContext;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Renders a fenced code block. Deliberately ignores {@link RenderContext#scale} - code blocks
- * always render at native size, matching the pre-split behavior.
- */
 public final class CodeBlockRenderer implements BlockRenderer<RichBlock.CodeBlock> {
 
     @Override

@@ -12,10 +12,6 @@ public final class FootnoteExtractor {
 
     private FootnoteExtractor() {}
 
-    /**
-     * Multiple candidates can accumulate per id ({@code [^id]: text} and
-     * {@code [^id?condition]: text} definitions) -- see {@link RichSpan.TipCandidate}.
-     */
     public record Result(String[] lines, Map<String, List<RichSpan.TipCandidate>> footnotes) {}
 
     public static Result extract(String[] rawLines) {

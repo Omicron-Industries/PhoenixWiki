@@ -11,7 +11,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 
-
 public final class ContainerBlockParser implements BlockParser {
     @Override
     public int tryParse(String[] lines, int i, List<RichBlock> out, ParseContext ctx) {
@@ -51,10 +50,6 @@ public final class ContainerBlockParser implements BlockParser {
         return j + 1;
     }
 
-    /**
-     * {@code title} is the header line's remainder: {@code image/path,width,height}. Each inner
-     * line starting with {@code @} is a marker: {@code @x,y tooltip text}.
-     */
     private static RichBlock.HotspotImage parseHotspotImage(String title, String[] inner) {
         String[] header = title.split(",", 3);
         if (header.length < 3) return null;

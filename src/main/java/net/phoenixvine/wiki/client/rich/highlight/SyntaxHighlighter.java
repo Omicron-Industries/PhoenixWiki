@@ -8,19 +8,6 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Tokenizes code-fence source into colored, optionally-interactive tokens.
- *
- * All language-specific behavior comes from {@link LanguageRegistry} - this class has no
- * per-language branching in it, which is the whole point: it doesn't change when a language
- * is added.
- *
- * Block comments ({@code /* ... *}{@code /}) and backtick template literals can span multiple
- * source lines, so tokenizing has to carry state ({@link Mode}) from one line to the next -
- * {@link #highlightDocument} is the entry point that does this correctly for a whole code block.
- * {@link #highlightLine} tokenizes a single line assuming it starts outside any multi-line
- * construct; keep using {@link #highlightDocument} for anything that might contain one.
- */
 public final class SyntaxHighlighter {
 
     private SyntaxHighlighter() {}
@@ -47,7 +34,6 @@ public final class SyntaxHighlighter {
 
     private record LineResult(List<Token> tokens, Mode endMode) {}
 
-
     public static List<List<Token>> highlightDocument(String lang, String code) {
         List<List<Token>> result = new ArrayList<>();
         Mode mode = Mode.NORMAL;
@@ -59,11 +45,9 @@ public final class SyntaxHighlighter {
         return result;
     }
 
-
     public static List<Token> highlightLine(String lang, String line) {
         return highlightLine(lang, line, Mode.NORMAL).tokens();
     }
-
 
     private static LineResult highlightLine(String lang, String line, Mode modeIn) {
         List<Token> out = new ArrayList<>();

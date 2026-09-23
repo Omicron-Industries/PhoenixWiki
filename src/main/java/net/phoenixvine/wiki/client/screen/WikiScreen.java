@@ -84,12 +84,6 @@ public class WikiScreen extends Screen {
         this(parent, namespace, basePath, (String) null, theme);
     }
 
-    /**
-     * @param targetPageId the {@link WikiPageLoader.Page#id()} to land on instead of the first
-     *                     page in the collection (e.g. from a {@code wiki:namespace/basePath#id}
-     *                     link) -- {@code null} keeps the old "first page" default. Silently
-     *                     falls back to the first page if no page has that id.
-     */
     public WikiScreen(Screen parent, String namespace, String basePath, String targetPageId) {
         this(parent, namespace, basePath, targetPageId, WikiTheme.DEFAULT);
     }

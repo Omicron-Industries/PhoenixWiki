@@ -19,7 +19,6 @@ public class PhoenixWiki {
     public PhoenixWiki(FMLJavaModLoadingContext context) {
         LOGGER.info("Phoenix Wiki loaded (library mod. see PhoenixWikiAPI to open a wiki screen)");
 
-
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> context.getModEventBus()
                 .addListener((FMLClientSetupEvent event) -> {
                     PhoenixTheme.loadThemes();

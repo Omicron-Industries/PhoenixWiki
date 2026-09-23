@@ -8,7 +8,6 @@ import net.phoenixvine.wiki.client.rich.markdown.ParseContext;
 import java.util.List;
 import java.util.regex.Matcher;
 
-
 public final class FenceBlockParser implements BlockParser {
     @Override
     public int tryParse(String[] lines, int i, List<RichBlock> out, ParseContext ctx) {

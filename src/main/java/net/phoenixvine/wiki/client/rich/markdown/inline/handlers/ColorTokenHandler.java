@@ -5,7 +5,6 @@ import net.minecraft.network.chat.TextColor;
 import net.phoenixvine.wiki.client.rich.markdown.inline.InlineHandler;
 import net.phoenixvine.wiki.client.rich.markdown.inline.InlineParseState;
 
-
 public final class ColorTokenHandler implements InlineHandler {
 
     @Override

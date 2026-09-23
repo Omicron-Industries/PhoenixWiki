@@ -12,18 +12,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.UnaryOperator;
 
-/**
- * Entry point for drawing and measuring a parsed wiki page. All public method signatures here
- * are unchanged from before the split - existing callers (e.g. WikiScreen) don't need to change.
- *
- * The actual per-block-type drawing logic lives in
- * {@code net.phoenixvine.wiki.client.rich.render}, one small {@link net.phoenixvine.wiki.client.rich.render.BlockRenderer}
- * class per {@link RichBlock} type, registered on {@link BlockRendererRegistry#DEFAULT}. To
- * support a new block type (including a custom one from another mod), write a
- * {@code BlockRenderer} for it and register it there - nothing in this class needs to change.
- * The generic word-wrap/click-region engine used by every block type lives in
- * {@link SpanRenderer}.
- */
 public final class WikiRichTextRenderer {
 
     public static final int LINE_H = SpanRenderer.LINE_H;
@@ -33,12 +21,6 @@ public final class WikiRichTextRenderer {
 
     private WikiRichTextRenderer() {}
 
-    /**
-     * Chains a resolver onto whatever's already registered, instead of clobbering it -- lets more
-     * than one mod contribute a resolver (each decides whether to transform a given
-     * {@link ResourceLocation} or pass it through to the previous one unchanged). Prefer this over
-     * assigning {@link #imageResolver} directly.
-     */
     public static void registerImageResolver(UnaryOperator<ResourceLocation> resolver) {
         UnaryOperator<ResourceLocation> previous = imageResolver;
         imageResolver = loc -> resolver.apply(previous.apply(loc));

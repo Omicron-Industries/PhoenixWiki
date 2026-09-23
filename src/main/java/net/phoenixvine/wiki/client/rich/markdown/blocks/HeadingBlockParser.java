@@ -27,8 +27,7 @@ public final class HeadingBlockParser implements BlockParser {
             collapsible = false;
             headingText = flat.replaceFirst("");
         } else {
-            // {collapse} is a no-op now that collapsible is the default -- still stripped so it
-            // never leaks into rendered heading text for existing content that tags it.
+
             Matcher collapse = COLLAPSE_MARKER.matcher(headingText);
             if (collapse.find()) headingText = collapse.replaceFirst("");
         }

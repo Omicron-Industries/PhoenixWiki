@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 import net.phoenixvine.wiki.PhoenixWiki;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.FileReader;
@@ -30,8 +31,7 @@ public final class SuiteHudConfig {
         Set<String> disabled = new HashSet<>();
         float globalScale = 1.0f;
         Map<String, Float> buttonScale = new HashMap<>();
-        int offsetX = 0;
-        int offsetY = 0;
+        Map<String, int[]> buttonAnchor = new HashMap<>();
     }
 
     private static Data data = null;
@@ -68,9 +68,8 @@ public final class SuiteHudConfig {
                     if (loaded != null) {
                         if (loaded.disabled != null) data.disabled.addAll(loaded.disabled);
                         if (loaded.buttonScale != null) data.buttonScale.putAll(loaded.buttonScale);
+                        if (loaded.buttonAnchor != null) data.buttonAnchor.putAll(loaded.buttonAnchor);
                         data.globalScale = clamp(loaded.globalScale <= 0f ? 1.0f : loaded.globalScale);
-                        data.offsetX = loaded.offsetX;
-                        data.offsetY = loaded.offsetY;
                     }
                 }
             } catch (Exception e) {
@@ -144,33 +143,27 @@ public final class SuiteHudConfig {
         }
     }
 
-    public static int getOffsetX() {
+    @Nullable
+    public static int[] getButtonAnchor(String key) {
         synchronized (LOCK) {
             ensureLoaded();
-            return data.offsetX;
+            return data.buttonAnchor.get(key);
         }
     }
 
-    public static int getOffsetY() {
+    public static void setButtonAnchorLive(String key, boolean anchorRight, int distX, boolean anchorBottom,
+                                           int distY) {
         synchronized (LOCK) {
             ensureLoaded();
-            return data.offsetY;
+            data.buttonAnchor.put(key, new int[]{anchorRight ? 1 : 0, distX, anchorBottom ? 1 : 0, distY});
         }
     }
 
-    /** Called every frame while a drag is in progress -- doesn't hit disk, just updates memory. */
-    public static void setOffsetLive(int x, int y) {
+    public static void commitButtonAnchor(String key, int @Nullable [] anchor) {
         synchronized (LOCK) {
             ensureLoaded();
-            data.offsetX = x;
-            data.offsetY = y;
-        }
-    }
-
-    /** Called once when a drag ends, to persist the final position. */
-    public static void commitOffset() {
-        synchronized (LOCK) {
-            ensureLoaded();
+            if (anchor == null) data.buttonAnchor.remove(key);
+            else data.buttonAnchor.put(key, anchor);
             save();
         }
     }

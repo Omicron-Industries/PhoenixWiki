@@ -7,7 +7,6 @@ import net.phoenixvine.wiki.client.rich.markdown.inline.InlineParseState;
 
 import java.util.List;
 
-
 public final class FootnoteRefHandler implements InlineHandler {
 
     @Override

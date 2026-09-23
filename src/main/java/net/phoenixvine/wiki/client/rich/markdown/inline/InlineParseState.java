@@ -7,9 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/** Mutable state threaded through inline parsing: the running style/background/scale (toggled by
- *  handlers as they consume delimiters), the buffer of plain text not yet flushed into a span,
- *  and the output span list. */
 public final class InlineParseState {
 
     public final String input;
@@ -34,7 +31,6 @@ public final class InlineParseState {
         return input.charAt(i);
     }
 
-    /** Turns any buffered plain text into a {@link RichSpan.Text} with the current style/background/scale. */
     public void flush() {
         if (buf.isEmpty()) return;
         out.add(new RichSpan.Text(buf.toString(), style, background, null, scale));

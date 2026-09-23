@@ -4,7 +4,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-
 public final class LanguageRegistry {
 
     private static final Map<String, LanguageDefinition> LANGUAGES = new ConcurrentHashMap<>();

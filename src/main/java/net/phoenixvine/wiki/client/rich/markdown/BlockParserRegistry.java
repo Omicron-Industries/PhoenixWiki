@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-
 public final class BlockParserRegistry {
 
     public static final BlockParserRegistry DEFAULT = new BlockParserRegistry()
@@ -45,12 +44,6 @@ public final class BlockParserRegistry {
         return this;
     }
 
-    /**
-     * Gives {@code parser} first refusal on every line, ahead of every built-in (including
-     * {@link net.phoenixvine.wiki.client.rich.markdown.blocks.ContainerBlockParser}) -- for a
-     * mod that needs to recognize its own {@code :::type} container before the generic one
-     * claims it as a plain {@link net.phoenixvine.wiki.client.rich.RichBlock.Callout}.
-     */
     public BlockParserRegistry registerFirst(BlockParser parser) {
         parsers.add(0, parser);
         return this;

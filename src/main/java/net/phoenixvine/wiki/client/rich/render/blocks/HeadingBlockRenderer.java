@@ -34,7 +34,6 @@ public final class HeadingBlockRenderer implements BlockRenderer<RichBlock.Headi
         return block.level() <= 2 ? SpanRenderer.GAP_HEADING_BEFORE : SpanRenderer.GAP_HEADING_BEFORE - 3;
     }
 
-
     public static void renderHeadingLike(RenderContext ctx, int level, List<RichSpan> spans, int x, int[] curY,
                                          int maxW) {
         GuiGraphics g = ctx.g;
@@ -51,7 +50,6 @@ public final class HeadingBlockRenderer implements BlockRenderer<RichBlock.Headi
         }
         curY[0] = afterHeadingY(curY[0], level);
     }
-
 
     static int afterHeadingY(int textBottomY, int level) {
         int y = level <= 1 ? textBottomY + BAR_OFFSET + BAR_THICKNESS : textBottomY;

@@ -10,12 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class LinkTargetHandler implements InlineHandler {
 
-    /**
-     * Extra recognized link-target scheme prefixes beyond the built-in {@code http://}/
-     * {@code https://}/{@code wiki:} -- e.g. Archive registers {@code quest:} for its
-     * Chronicles deep-link bridge. The engine itself never acts on these; it only decides
-     * whether {@code [label](target)} becomes a clickable {@link RichSpan.Link} at all.
-     */
     private static final Set<String> EXTRA_SCHEMES = ConcurrentHashMap.newKeySet();
 
     public static void registerScheme(String prefix) {
