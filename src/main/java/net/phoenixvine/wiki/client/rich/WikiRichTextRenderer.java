@@ -33,6 +33,17 @@ public final class WikiRichTextRenderer {
 
     private WikiRichTextRenderer() {}
 
+    /**
+     * Chains a resolver onto whatever's already registered, instead of clobbering it -- lets more
+     * than one mod contribute a resolver (each decides whether to transform a given
+     * {@link ResourceLocation} or pass it through to the previous one unchanged). Prefer this over
+     * assigning {@link #imageResolver} directly.
+     */
+    public static void registerImageResolver(UnaryOperator<ResourceLocation> resolver) {
+        UnaryOperator<ResourceLocation> previous = imageResolver;
+        imageResolver = loc -> resolver.apply(previous.apply(loc));
+    }
+
     public static List<RichSpan.Region> render(GuiGraphics g, Font font,
                                                List<RichSpan> spans,
                                                int x, int y, int maxW,

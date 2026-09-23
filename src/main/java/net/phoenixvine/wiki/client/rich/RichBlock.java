@@ -1,5 +1,7 @@
 package net.phoenixvine.wiki.client.rich;
 
+import net.minecraft.resources.ResourceLocation;
+
 import java.util.List;
 
 /**
@@ -16,7 +18,18 @@ public interface RichBlock {
 
     List<RichSpan> spans();
 
-    record Heading(int level, List<RichSpan> spans) implements RichBlock {}
+    /**
+     * {@code collapsible} defaults to true (headings fold into a {@link CollapsibleSection} by
+     * {@link net.phoenixvine.wiki.client.rich.markdown.HeadingSectionGrouper} unless the source
+     * tags the heading {@code {flat}}/{@code {nocollapse}}) -- see
+     * {@link net.phoenixvine.wiki.client.rich.markdown.blocks.HeadingBlockParser}.
+     */
+    record Heading(int level, List<RichSpan> spans, boolean collapsible) implements RichBlock {
+
+        public Heading(int level, List<RichSpan> spans) {
+            this(level, spans, true);
+        }
+    }
 
     record Paragraph(List<RichSpan> spans) implements RichBlock {}
 
@@ -84,6 +97,23 @@ public interface RichBlock {
     }
 
     record Blank() implements RichBlock {
+
+        @Override
+        public List<RichSpan> spans() {
+            return List.of();
+        }
+    }
+
+    record Hotspot(int x, int y, String tooltip) {}
+
+    /**
+     * A fixed-size image with small always-visible hover-tooltip markers at pixel coordinates
+     * relative to the image's top-left corner -- a labeled-diagram primitive. Parsed from a
+     * {@code :::hotspots image/path,width,height} ... {@code @x,y tooltip text} ... {@code :::}
+     * container (see {@link net.phoenixvine.wiki.client.rich.markdown.blocks.ContainerBlockParser}).
+     */
+    record HotspotImage(ResourceLocation image, int width, int height,
+                        List<Hotspot> hotspots) implements RichBlock {
 
         @Override
         public List<RichSpan> spans() {

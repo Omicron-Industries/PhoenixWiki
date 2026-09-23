@@ -14,8 +14,12 @@ public final class OrderedListBlockParser implements BlockParser {
         Matcher om = MarkdownPatterns.ORDERED.matcher(lines[i].trim());
         if (!om.matches()) return -1;
         String marker = om.group(1) + ".";
-        out.add(new RichBlock.ListItem(marker, Math.max(14, estimateMarkerWidth(marker)), ctx.parseInline(om.group(2))));
-        return i + 1;
+        StringBuilder item = new StringBuilder(om.group(2));
+        int next = i + 1;
+        if (ctx.slurpListContinuations()) next = MarkdownPatterns.slurpListContinuation(lines, next, item);
+        out.add(new RichBlock.ListItem(marker, Math.max(14, estimateMarkerWidth(marker)),
+                ctx.parseInline(item.toString())));
+        return next;
     }
 
     private static int estimateMarkerWidth(String marker) {

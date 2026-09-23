@@ -7,6 +7,7 @@ import net.phoenixvine.wiki.client.rich.render.blocks.CodeBlockRenderer;
 import net.phoenixvine.wiki.client.rich.render.blocks.CollapsibleSectionBlockRenderer;
 import net.phoenixvine.wiki.client.rich.render.blocks.DetailsBlockRenderer;
 import net.phoenixvine.wiki.client.rich.render.blocks.HeadingBlockRenderer;
+import net.phoenixvine.wiki.client.rich.render.blocks.HotspotImageBlockRenderer;
 import net.phoenixvine.wiki.client.rich.render.blocks.ListItemBlockRenderer;
 import net.phoenixvine.wiki.client.rich.render.blocks.ParagraphBlockRenderer;
 import net.phoenixvine.wiki.client.rich.render.blocks.QuoteBlockRenderer;
@@ -33,7 +34,8 @@ public final class BlockRendererRegistry {
             .register(RichBlock.Quote.class, new QuoteBlockRenderer())
             .register(RichBlock.Table.class, new TableBlockRenderer())
             .register(RichBlock.Callout.class, new CalloutBlockRenderer())
-            .register(RichBlock.Details.class, new DetailsBlockRenderer());
+            .register(RichBlock.Details.class, new DetailsBlockRenderer())
+            .register(RichBlock.HotspotImage.class, new HotspotImageBlockRenderer());
 
     private final Map<Class<? extends RichBlock>, BlockRenderer<? extends RichBlock>> renderers = new HashMap<>();
 

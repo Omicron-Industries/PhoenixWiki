@@ -58,6 +58,7 @@ public final class SpanRenderer {
             if (s instanceof RichSpan.Text t) sb.append(t.text());
             else if (s instanceof RichSpan.Link l) sb.append(l.label());
             else if (s instanceof RichSpan.Tip t) sb.append(t.label());
+            else if (s instanceof RichSpan.ConditionalTip t) sb.append(t.label());
         }
         return sb.toString();
     }
@@ -169,6 +170,15 @@ public final class SpanRenderer {
                         curX, curY[0], originX, maxW, clipTop, clipBot, regions, t, scale);
                 curX = pos[0];
                 curY[0] = pos[1];
+            } else if (span instanceof RichSpan.ConditionalTip t) {
+                // Never resolved here -- the engine has no condition system of its own. Renders
+                // as plain, non-interactive styled text (no Region) unless the caller has already
+                // walked the tree and replaced this with a concrete Tip/Text before render.
+                Style ts = t.style().withColor(TIP_COLOR);
+                int[] pos = renderWords(g, font, t.label(), ts, TIP_COLOR,
+                        curX, curY[0], originX, maxW, clipTop, clipBot, regions, null, scale);
+                curX = pos[0];
+                curY[0] = pos[1];
             }
         }
         if (curX > originX) curY[0] += lineH;
@@ -201,6 +211,10 @@ public final class SpanRenderer {
                 curX = p[0];
                 curY = p[1];
             } else if (span instanceof RichSpan.Tip t) {
+                int[] p = measureWords(font, t.label(), t.style(), curX, curY, 0, maxW, scale);
+                curX = p[0];
+                curY = p[1];
+            } else if (span instanceof RichSpan.ConditionalTip t) {
                 int[] p = measureWords(font, t.label(), t.style(), curX, curY, 0, maxW, scale);
                 curX = p[0];
                 curY = p[1];

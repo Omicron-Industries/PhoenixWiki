@@ -13,7 +13,7 @@ import java.util.Map;
 public final class InlineParseState {
 
     public final String input;
-    public final Map<String, String> footnotes;
+    public final Map<String, List<RichSpan.TipCandidate>> footnotes;
     public final List<RichSpan> out = new ArrayList<>();
     public final StringBuilder buf = new StringBuilder();
 
@@ -21,7 +21,7 @@ public final class InlineParseState {
     public int background = 0;
     public float scale = 1f;
 
-    public InlineParseState(String input, Map<String, String> footnotes) {
+    public InlineParseState(String input, Map<String, List<RichSpan.TipCandidate>> footnotes) {
         this.input = input;
         this.footnotes = footnotes;
     }

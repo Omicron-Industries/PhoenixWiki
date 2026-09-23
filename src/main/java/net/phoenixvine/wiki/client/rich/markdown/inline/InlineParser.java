@@ -10,11 +10,12 @@ public final class InlineParser {
 
     private InlineParser() {}
 
-    public static List<RichSpan> parse(String input, Map<String, String> footnotes) {
+    public static List<RichSpan> parse(String input, Map<String, List<RichSpan.TipCandidate>> footnotes) {
         return parse(input, footnotes, InlineHandlerRegistry.DEFAULT);
     }
 
-    public static List<RichSpan> parse(String input, Map<String, String> footnotes, InlineHandlerRegistry registry) {
+    public static List<RichSpan> parse(String input, Map<String, List<RichSpan.TipCandidate>> footnotes,
+                                       InlineHandlerRegistry registry) {
         if (input == null || input.isEmpty()) return new ArrayList<>();
 
         var s = new InlineParseState(smartQuotes(input), footnotes);

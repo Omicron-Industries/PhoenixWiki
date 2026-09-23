@@ -20,7 +20,7 @@ public final class ParagraphBlockParser implements BlockParser {
         while (j < lines.length) {
             String t = lines[j].trim();
             if (t.isEmpty() || isOtherBlockStart(lines, j, t)) break;
-            if (!para.isEmpty()) para.append(' ');
+            if (!para.isEmpty()) para.append(ctx.hardLineBreaks() ? '\n' : ' ');
             para.append(t);
             j++;
         }

@@ -44,6 +44,27 @@ public final class SuiteHudBar {
     private static final int MARGIN = 4;
     private static final int GRID_ROWS = 3;
 
+    // Other mods (FTB Library/Quests, etc.) sometimes draw their own HUD toggle in the same
+    // top-left corner, and there's no API to ask any of them for their bounds -- so instead of
+    // guessing which mods to avoid, the whole bar is just middle-click-draggable (see
+    // onScreenMouseDrag below) and remembers wherever the player drops it. barX()/barY() expose
+    // the live position so EMI's exclusion zone (see ChroniclesEmiPlugin) tracks it too.
+    private static int leftMargin() {
+        return MARGIN + SuiteHudConfig.getOffsetX();
+    }
+
+    private static int topMargin() {
+        return MARGIN + SuiteHudConfig.getOffsetY();
+    }
+
+    public static int barX() {
+        return leftMargin();
+    }
+
+    public static int barY() {
+        return topMargin();
+    }
+
     private record Entry(String modId, int priority, ResourceLocation icon, Supplier<Component> tooltip,
                          IntSupplier slotCount, Runnable onClick, int texWidth, int texHeight,
                          boolean tintToTheme) {}
@@ -139,13 +160,13 @@ public final class SuiteHudBar {
             }
 
             int[] colX = new int[cols];
-            int cx = MARGIN;
+            int cx = leftMargin();
             for (int c = 0; c < cols; c++) {
                 colX[c] = cx;
                 cx += colW[c] + GAP;
             }
             int[] rowY = new int[rows];
-            int cy = MARGIN;
+            int cy = topMargin();
             for (int r = 0; r < rows; r++) {
                 rowY[r] = cy;
                 cy += rowH[r] + GAP;
@@ -197,6 +218,25 @@ public final class SuiteHudBar {
         }
         return null;
     }
+
+    /** The bar's own bounding box, independent of {@link #barWidth}/{@link #barHeight}'s
+     *  "absolute right/bottom edge" semantics (those are sized for the EMI exclusion zone) --
+     *  used so a middle-click anywhere between icons, not just exactly on one, starts a drag. */
+    private static boolean withinBar(List<HudSlot> slots, double mx, double my) {
+        if (slots.isEmpty()) return false;
+        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, maxX = 0, maxY = 0;
+        for (HudSlot s : slots) {
+            minX = Math.min(minX, s.x());
+            minY = Math.min(minY, s.y());
+            maxX = Math.max(maxX, s.x() + s.size());
+            maxY = Math.max(maxY, s.y() + s.size());
+        }
+        return mx >= minX && mx < maxX && my >= minY && my < maxY;
+    }
+
+    private static boolean dragging = false;
+    private static double dragStartMx, dragStartMy;
+    private static int dragStartOffsetX, dragStartOffsetY;
 
     private static void draw(GuiGraphics g, Minecraft mc, double hoverMx, double hoverMy) {
         var theme = PhoenixTheme.current();
@@ -287,6 +327,17 @@ public final class SuiteHudBar {
         if (mc.player == null || entriesEmpty() || screenWantsBar(screen)) return;
 
         List<HudSlot> slots = computeLayout();
+
+        if (event.getButton() == 2 && withinBar(slots, event.getMouseX(), event.getMouseY())) {
+            dragging = true;
+            dragStartMx = event.getMouseX();
+            dragStartMy = event.getMouseY();
+            dragStartOffsetX = SuiteHudConfig.getOffsetX();
+            dragStartOffsetY = SuiteHudConfig.getOffsetY();
+            event.setCanceled(true);
+            return;
+        }
+
         HudSlot hit = slotAt(slots, event.getMouseX(), event.getMouseY());
         if (hit == null) return;
 
@@ -296,10 +347,33 @@ public final class SuiteHudBar {
             return;
         }
         if (event.getButton() == 1) {
-            
+
             SuiteHudConfig.setEnabled(hit.entry().modId(), false);
         } else if (event.getButton() == 0) {
             hit.entry().onClick().run();
         }
+    }
+
+    @SubscribeEvent
+    public static void onScreenMouseDrag(ScreenEvent.MouseDragged.Pre event) {
+        if (!dragging) return;
+        event.setCanceled(true);
+
+        Screen screen = event.getScreen();
+        int newOffsetX = dragStartOffsetX + (int) Math.round(event.getMouseX() - dragStartMx);
+        int newOffsetY = dragStartOffsetY + (int) Math.round(event.getMouseY() - dragStartMy);
+        // Loose safety clamp -- keeps the drag handle from being dropped somewhere you can no
+        // longer reach it, without needing to know the bar's exact size mid-drag.
+        newOffsetX = Math.max(0, Math.min(screen.width - BTN_SIZE - MARGIN, newOffsetX));
+        newOffsetY = Math.max(0, Math.min(screen.height - BTN_SIZE - MARGIN, newOffsetY));
+        SuiteHudConfig.setOffsetLive(newOffsetX, newOffsetY);
+    }
+
+    @SubscribeEvent
+    public static void onScreenMouseRelease(ScreenEvent.MouseButtonReleased.Pre event) {
+        if (!dragging || event.getButton() != 2) return;
+        dragging = false;
+        SuiteHudConfig.commitOffset();
+        event.setCanceled(true);
     }
 }

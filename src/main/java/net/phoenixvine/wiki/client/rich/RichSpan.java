@@ -3,6 +3,8 @@ package net.phoenixvine.wiki.client.rich;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.List;
+
 /**
  * A single inline element within a block's text flow.
  *
@@ -30,6 +32,26 @@ public interface RichSpan {
     record Link(String label, Style style, String url) implements RichSpan {}
 
     record Tip(String label, Style style, String tooltip) implements RichSpan {}
+
+    /**
+     * One candidate tooltip for a {@link ConditionalTip}: {@code conditionExpr} is a raw,
+     * unparsed condition expression (mod-specific syntax) or {@code null}/blank for "always
+     * matches" -- the engine never parses or evaluates it. A {@code null} tooltip means "no such
+     * candidate," used as the caller-facing sentinel when nothing matches.
+     */
+    record TipCandidate(String conditionExpr, String tooltip) {}
+
+    /**
+     * A footnote reference with more than one possible tooltip, one per condition -- e.g.
+     * {@code [^id]: text} and {@code [^id?condition]: text} definitions for the same id (see
+     * {@link net.phoenixvine.wiki.client.rich.markdown.FootnoteExtractor}). The engine has no
+     * condition system of its own and never resolves this itself: it renders as plain
+     * non-interactive styled text unless the caller walks the block tree before render and
+     * replaces each {@code ConditionalTip} with a concrete {@link Tip} (or {@link Text} if
+     * nothing matches), evaluating {@link TipCandidate#conditionExpr()} against whatever
+     * condition system that mod already has.
+     */
+    record ConditionalTip(String label, Style style, List<TipCandidate> candidates) implements RichSpan {}
 
     record Image(ResourceLocation texture, int w, int h) implements RichSpan {}
 

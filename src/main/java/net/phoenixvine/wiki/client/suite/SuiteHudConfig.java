@@ -30,6 +30,8 @@ public final class SuiteHudConfig {
         Set<String> disabled = new HashSet<>();
         float globalScale = 1.0f;
         Map<String, Float> buttonScale = new HashMap<>();
+        int offsetX = 0;
+        int offsetY = 0;
     }
 
     private static Data data = null;
@@ -67,6 +69,8 @@ public final class SuiteHudConfig {
                         if (loaded.disabled != null) data.disabled.addAll(loaded.disabled);
                         if (loaded.buttonScale != null) data.buttonScale.putAll(loaded.buttonScale);
                         data.globalScale = clamp(loaded.globalScale <= 0f ? 1.0f : loaded.globalScale);
+                        data.offsetX = loaded.offsetX;
+                        data.offsetY = loaded.offsetY;
                     }
                 }
             } catch (Exception e) {
@@ -136,6 +140,37 @@ public final class SuiteHudConfig {
             ensureLoaded();
             if (scale == null) data.buttonScale.remove(modId);
             else data.buttonScale.put(modId, clamp(scale));
+            save();
+        }
+    }
+
+    public static int getOffsetX() {
+        synchronized (LOCK) {
+            ensureLoaded();
+            return data.offsetX;
+        }
+    }
+
+    public static int getOffsetY() {
+        synchronized (LOCK) {
+            ensureLoaded();
+            return data.offsetY;
+        }
+    }
+
+    /** Called every frame while a drag is in progress -- doesn't hit disk, just updates memory. */
+    public static void setOffsetLive(int x, int y) {
+        synchronized (LOCK) {
+            ensureLoaded();
+            data.offsetX = x;
+            data.offsetY = y;
+        }
+    }
+
+    /** Called once when a drag ends, to persist the final position. */
+    public static void commitOffset() {
+        synchronized (LOCK) {
+            ensureLoaded();
             save();
         }
     }

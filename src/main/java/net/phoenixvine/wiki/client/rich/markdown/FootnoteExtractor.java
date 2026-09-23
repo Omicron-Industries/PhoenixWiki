@@ -1,5 +1,7 @@
 package net.phoenixvine.wiki.client.rich.markdown;
 
+import net.phoenixvine.wiki.client.rich.RichSpan;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -10,15 +12,20 @@ public final class FootnoteExtractor {
 
     private FootnoteExtractor() {}
 
-    public record Result(String[] lines, Map<String, String> footnotes) {}
+    /**
+     * Multiple candidates can accumulate per id ({@code [^id]: text} and
+     * {@code [^id?condition]: text} definitions) -- see {@link RichSpan.TipCandidate}.
+     */
+    public record Result(String[] lines, Map<String, List<RichSpan.TipCandidate>> footnotes) {}
 
     public static Result extract(String[] rawLines) {
-        Map<String, String> footnotes = new LinkedHashMap<>();
+        Map<String, List<RichSpan.TipCandidate>> footnotes = new LinkedHashMap<>();
         List<String> filtered = new ArrayList<>(rawLines.length);
         for (String line : rawLines) {
             Matcher fn = MarkdownPatterns.FOOTNOTE_DEF.matcher(line.trim());
             if (fn.matches()) {
-                footnotes.put(fn.group(1), fn.group(2));
+                footnotes.computeIfAbsent(fn.group(1), k -> new ArrayList<>())
+                        .add(new RichSpan.TipCandidate(fn.group(2), fn.group(3)));
             } else {
                 filtered.add(line);
             }

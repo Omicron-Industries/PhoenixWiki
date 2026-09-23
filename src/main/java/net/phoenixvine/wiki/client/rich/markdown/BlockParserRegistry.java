@@ -1,6 +1,7 @@
 package net.phoenixvine.wiki.client.rich.markdown;
 
 import net.phoenixvine.wiki.client.rich.RichBlock;
+import net.phoenixvine.wiki.client.rich.RichSpan;
 import net.phoenixvine.wiki.client.rich.markdown.blocks.ContainerBlockParser;
 import net.phoenixvine.wiki.client.rich.markdown.blocks.FenceBlockParser;
 import net.phoenixvine.wiki.client.rich.markdown.blocks.HeadingBlockParser;
@@ -44,6 +45,17 @@ public final class BlockParserRegistry {
         return this;
     }
 
+    /**
+     * Gives {@code parser} first refusal on every line, ahead of every built-in (including
+     * {@link net.phoenixvine.wiki.client.rich.markdown.blocks.ContainerBlockParser}) -- for a
+     * mod that needs to recognize its own {@code :::type} container before the generic one
+     * claims it as a plain {@link net.phoenixvine.wiki.client.rich.RichBlock.Callout}.
+     */
+    public BlockParserRegistry registerFirst(BlockParser parser) {
+        parsers.add(0, parser);
+        return this;
+    }
+
     List<RichBlock> parseLines(String[] lines, ParseContext ctx) {
         List<RichBlock> blocks = new ArrayList<>();
         int i = 0;
@@ -68,7 +80,17 @@ public final class BlockParserRegistry {
         return blocks;
     }
 
-    public List<RichBlock> parse(String[] lines, Map<String, String> footnotes) {
-        return parseLines(lines, new ParseContext(footnotes, this));
+    public List<RichBlock> parse(String[] lines, Map<String, List<RichSpan.TipCandidate>> footnotes) {
+        return parse(lines, footnotes, false, false);
+    }
+
+    public List<RichBlock> parse(String[] lines, Map<String, List<RichSpan.TipCandidate>> footnotes,
+                                 boolean slurpListContinuations) {
+        return parse(lines, footnotes, slurpListContinuations, false);
+    }
+
+    public List<RichBlock> parse(String[] lines, Map<String, List<RichSpan.TipCandidate>> footnotes,
+                                 boolean slurpListContinuations, boolean hardLineBreaks) {
+        return parseLines(lines, new ParseContext(footnotes, this, slurpListContinuations, hardLineBreaks));
     }
 }

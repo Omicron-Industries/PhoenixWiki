@@ -16,7 +16,10 @@ public final class HeadingSectionGrouper {
         int i = 0;
         while (i < blocks.size()) {
             RichBlock b = blocks.get(i);
-            if (b instanceof RichBlock.Heading h) {
+            if (b instanceof RichBlock.Heading h && !h.collapsible()) {
+                out.add(b);
+                i++;
+            } else if (b instanceof RichBlock.Heading h) {
                 int j = i + 1;
                 while (j < blocks.size()) {
                     RichBlock next = blocks.get(j);

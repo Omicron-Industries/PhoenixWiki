@@ -52,6 +52,7 @@ public class WikiScreen extends Screen {
     private final Screen parent;
     private final String namespace;
     private final String basePath;
+    private final String targetPageId;
     private final WikiTheme theme;
 
     private List<WikiPageLoader.Page> pages = List.of();
@@ -76,14 +77,29 @@ public class WikiScreen extends Screen {
     private record SidebarEntry(boolean isHeader, String chapter, int pageIndex) {}
 
     public WikiScreen(Screen parent, String namespace, String basePath) {
-        this(parent, namespace, basePath, WikiTheme.DEFAULT);
+        this(parent, namespace, basePath, (String) null, WikiTheme.DEFAULT);
     }
 
     public WikiScreen(Screen parent, String namespace, String basePath, WikiTheme theme) {
+        this(parent, namespace, basePath, (String) null, theme);
+    }
+
+    /**
+     * @param targetPageId the {@link WikiPageLoader.Page#id()} to land on instead of the first
+     *                     page in the collection (e.g. from a {@code wiki:namespace/basePath#id}
+     *                     link) -- {@code null} keeps the old "first page" default. Silently
+     *                     falls back to the first page if no page has that id.
+     */
+    public WikiScreen(Screen parent, String namespace, String basePath, String targetPageId) {
+        this(parent, namespace, basePath, targetPageId, WikiTheme.DEFAULT);
+    }
+
+    public WikiScreen(Screen parent, String namespace, String basePath, String targetPageId, WikiTheme theme) {
         super(Component.literal("Wiki"));
         this.parent = parent;
         this.namespace = namespace;
         this.basePath = basePath;
+        this.targetPageId = targetPageId;
         this.theme = theme;
     }
 
@@ -115,6 +131,14 @@ public class WikiScreen extends Screen {
 
         if (pages.isEmpty()) {
             pages = WikiPageLoader.loadPages(namespace, basePath);
+            if (targetPageId != null) {
+                for (int i = 0; i < pages.size(); i++) {
+                    if (pages.get(i).id().equalsIgnoreCase(targetPageId)) {
+                        activePage = i;
+                        break;
+                    }
+                }
+            }
         }
 
         if (savedSidebarW > 0) {

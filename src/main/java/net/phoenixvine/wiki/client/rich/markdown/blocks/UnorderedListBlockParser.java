@@ -19,9 +19,13 @@ public final class UnorderedListBlockParser implements BlockParser {
             boolean checked = !cb.group(1).equals(" ");
             String key = "cl#" + i;
             out.add(new RichBlock.Checklist(key, checked, 10 + nestLevel * 10, ctx.parseInline(cb.group(2))));
-        } else {
-            out.add(new RichBlock.ListItem("\u2022", 10 + nestLevel * 10, ctx.parseInline(um.group(2))));
+            return i + 1;
         }
-        return i + 1;
+
+        StringBuilder item = new StringBuilder(um.group(2));
+        int next = i + 1;
+        if (ctx.slurpListContinuations()) next = MarkdownPatterns.slurpListContinuation(lines, next, item);
+        out.add(new RichBlock.ListItem("\u2022", 10 + nestLevel * 10, ctx.parseInline(item.toString())));
+        return next;
     }
 }
