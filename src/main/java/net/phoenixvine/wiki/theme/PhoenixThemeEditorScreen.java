@@ -56,7 +56,7 @@ public class PhoenixThemeEditorScreen extends Screen {
     private static final int SIDEBAR_MIN = 185;
 
     private static final int MIN_CONTENT_W = SIDEBAR_MIN + 260;
-    private static final int MIN_CONTENT_H = 420;
+    private static final int MIN_CONTENT_H = 442;
 
     private float uiScale = 1f;
     private int virtualWidth, virtualHeight;
@@ -146,7 +146,7 @@ public class PhoenixThemeEditorScreen extends Screen {
         addField("Ally", phoenixTheme.ally, sbX, y, boxW);
         y += rh + 6;
 
-        int ctrlY = Math.max(y + 4, virtualHeight - 92);
+        int ctrlY = Math.max(y + 4, virtualHeight - 114);
         nameInput = new EditBox(font, virtualWidth - sbW + 10, ctrlY, sbW - 20, 16, Component.literal("Theme name"));
         nameInput.setValue(curName);
         nameInput.setMaxLength(32);
@@ -170,6 +170,14 @@ public class PhoenixThemeEditorScreen extends Screen {
                 .build());
 
         addRenderableWidget(Button
+                .builder(Component.literal("🎲 Reroll"), b -> reroll())
+                .bounds(virtualWidth - sbW + 10, ctrlY + 42, sbW - 20, 18)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Randomizes every color and gives it a silly name.\n" +
+                                "Ctrl+Z to revert if it's too much.")))
+                .build());
+
+        addRenderableWidget(Button
                 .builder(Component.literal("§7Exit"), b -> {
                     if (hasChanges()) {
                         if (!confirmActive || !"EXIT".equals(pendingAction)) {
@@ -181,7 +189,7 @@ public class PhoenixThemeEditorScreen extends Screen {
                     }
                     onClose();
                 })
-                .bounds(virtualWidth - sbW + 10, ctrlY + 42, sbW - 20, 18).build());
+                .bounds(virtualWidth - sbW + 10, ctrlY + 64, sbW - 20, 18).build());
 
         addRenderableWidget(Button
                 .builder(Component.literal(PhoenixTheme.isSharedMode() ?
@@ -191,12 +199,38 @@ public class PhoenixThemeEditorScreen extends Screen {
                             lastTrackedName = null;
                             init();
                         })
-                .bounds(virtualWidth - sbW + 10, ctrlY + 64, sbW - 20, 18)
+                .bounds(virtualWidth - sbW + 10, ctrlY + 86, sbW - 20, 18)
                 .tooltip(Tooltip.create(Component.literal(
                         "Shared: every Phoenix suite mod uses this one theme.\n" +
                                 "Per-mod: each mod remembers its own. The theme you set here only\n" +
                                 "applies to whichever mod opened this screen.")))
                 .build());
+    }
+
+    private static final String[] REROLL_WORDS = {
+            "Regrettable", "Illegally", "Suspicious", "Mildly", "Aggressively", "Cursed",
+            "Deeply", "Questionably", "Unreasonably", "Tragically", "Neon", "Bright", "Beige",
+            "Radioactive", "Chaos", "Contrast", "Sunset", "Static", "Glorious", "Haunted",
+    };
+
+    private void reroll() {
+        pushUndo();
+        var rng = new java.util.Random();
+        for (FieldEntry f : fields) {
+            float hue = rng.nextFloat();
+            float sat = 0.45f + rng.nextFloat() * 0.45f;
+            float val = 0.35f + rng.nextFloat() * 0.55f;
+            String hex = String.format("FF%06X", Color.HSBtoRGB(hue, sat, val) & 0xFFFFFF);
+            f.target().set(hex);
+            f.box().setValue(hex);
+        }
+        if (nameInput != null) {
+            String name = REROLL_WORDS[rng.nextInt(REROLL_WORDS.length)] + " " +
+                    REROLL_WORDS[rng.nextInt(REROLL_WORDS.length)];
+            nameInput.setValue(name.toUpperCase(Locale.ROOT));
+        }
+        confirmActive = false;
+        syncPalette(PhoenixTheme.current(ownerModId));
     }
 
     private void newTheme() {

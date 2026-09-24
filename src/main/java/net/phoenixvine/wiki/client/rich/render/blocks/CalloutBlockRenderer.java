@@ -16,7 +16,7 @@ public final class CalloutBlockRenderer implements BlockRenderer<RichBlock.Callo
     public int render(RenderContext ctx, RichBlock.Callout block, int x, int y, int maxW) {
         int color = calloutColor(block.type());
         String icon = calloutIcon(block.type());
-        String title = block.title().isEmpty() ? capitalize(block.type()) : block.title();
+        String title = block.title().isEmpty() ? calloutTitle(block.type()) : block.title();
 
         int innerX = x + 10;
         int innerMaxW = maxW - 16;
@@ -39,6 +39,8 @@ public final class CalloutBlockRenderer implements BlockRenderer<RichBlock.Callo
             case "danger", "error" -> 0xFFE05050;
             case "tip", "success" -> 0xFF50C878;
             case "note", "info" -> 0xFF55AAFF;
+            case "skill_issue", "skillissue" -> 0xFFFF5577;
+            case "cope", "copium" -> 0xFF8888AA;
             default -> 0xFF9966FF;
         };
     }
@@ -49,7 +51,17 @@ public final class CalloutBlockRenderer implements BlockRenderer<RichBlock.Callo
             case "danger", "error" -> "⛔";
             case "tip", "success" -> "💡";
             case "note", "info" -> "ℹ";
+            case "skill_issue", "skillissue" -> "🫵";
+            case "cope", "copium" -> "😔";
             default -> "●";
+        };
+    }
+
+    private static String calloutTitle(String type) {
+        return switch (type) {
+            case "skill_issue", "skillissue" -> "Skill Issue";
+            case "cope", "copium" -> "Cope";
+            default -> capitalize(type);
         };
     }
 

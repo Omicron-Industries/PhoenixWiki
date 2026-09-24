@@ -41,9 +41,10 @@ public final class ContainerBlockParser implements BlockParser {
         }
 
         List<RichBlock> children = ctx.parseLines(inner);
-        if (type.equals("spoiler") || type.equals("details")) {
+        if (type.equals("spoiler") || type.equals("details") || type.equals("loading")) {
             String key = (title.isEmpty() ? "section" : title) + "#" + start;
-            out.add(new RichBlock.Details(key, title.isEmpty() ? "Details" : title, children));
+            out.add(new RichBlock.Details(key, title.isEmpty() ? "Details" : title, children,
+                    type.equals("loading")));
         } else {
             out.add(new RichBlock.Callout(type, title, children));
         }

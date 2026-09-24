@@ -33,7 +33,7 @@ public final class HeadingSectionGrouper {
                 out.add(new RichBlock.Callout(c.type(), c.title(), group(c.children())));
                 i++;
             } else if (b instanceof RichBlock.Details d) {
-                out.add(new RichBlock.Details(d.expandKey(), d.title(), group(d.children())));
+                out.add(new RichBlock.Details(d.expandKey(), d.title(), group(d.children()), d.fakeLoading()));
                 i++;
             } else {
                 out.add(b);

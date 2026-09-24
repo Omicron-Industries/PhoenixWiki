@@ -32,6 +32,10 @@ public final class SuiteHudConfig {
         float globalScale = 1.0f;
         Map<String, Float> buttonScale = new HashMap<>();
         Map<String, int[]> buttonAnchor = new HashMap<>();
+        Map<String, Integer> hideCount = new HashMap<>();
+        Map<String, Integer> hoverCount = new HashMap<>();
+        boolean gravityMode = false;
+        Set<String> gravityPlaced = new HashSet<>();
     }
 
     private static Data data = null;
@@ -69,6 +73,10 @@ public final class SuiteHudConfig {
                         if (loaded.disabled != null) data.disabled.addAll(loaded.disabled);
                         if (loaded.buttonScale != null) data.buttonScale.putAll(loaded.buttonScale);
                         if (loaded.buttonAnchor != null) data.buttonAnchor.putAll(loaded.buttonAnchor);
+                        if (loaded.hideCount != null) data.hideCount.putAll(loaded.hideCount);
+                        if (loaded.hoverCount != null) data.hoverCount.putAll(loaded.hoverCount);
+                        if (loaded.gravityPlaced != null) data.gravityPlaced.addAll(loaded.gravityPlaced);
+                        data.gravityMode = loaded.gravityMode;
                         data.globalScale = clamp(loaded.globalScale <= 0f ? 1.0f : loaded.globalScale);
                     }
                 }
@@ -174,6 +182,80 @@ public final class SuiteHudConfig {
             ensureLoaded();
             data.buttonAnchor.clear();
             save();
+        }
+    }
+
+    /** Backs the "shy button" easter egg -- every 3rd hide is spared instead of applied. Returns
+     *  the new cumulative hide count for {@code modId}. */
+    public static int incrementHideCount(String modId) {
+        synchronized (LOCK) {
+            ensureLoaded();
+            int next = data.hideCount.getOrDefault(modId, 0) + 1;
+            data.hideCount.put(modId, next);
+            save();
+            return next;
+        }
+    }
+
+    /** Backs the escalating hover tooltip ("Wiki" -> "Still here." -> "You've hovered this N
+     *  times."). Returns the new cumulative hover count for {@code modId}. */
+    public static int incrementHoverCount(String modId) {
+        synchronized (LOCK) {
+            ensureLoaded();
+            int next = data.hoverCount.getOrDefault(modId, 0) + 1;
+            data.hoverCount.put(modId, next);
+            save();
+            return next;
+        }
+    }
+
+    public static int getHoverCount(String modId) {
+        synchronized (LOCK) {
+            ensureLoaded();
+            return data.hoverCount.getOrDefault(modId, 0);
+        }
+    }
+
+    public static boolean isGravityMode() {
+        synchronized (LOCK) {
+            ensureLoaded();
+            return data.gravityMode;
+        }
+    }
+
+    public static void setGravityModeFlag(boolean enabled) {
+        synchronized (LOCK) {
+            ensureLoaded();
+            data.gravityMode = enabled;
+            save();
+        }
+    }
+
+    public static void markGravityPlaced(String key) {
+        synchronized (LOCK) {
+            ensureLoaded();
+            data.gravityPlaced.add(key);
+            save();
+        }
+    }
+
+    /** Un-piles every button gravity dropped (clears their custom anchor, back to the natural
+     *  grid) without touching anything the player dragged themselves. */
+    public static void clearGravityPiles() {
+        synchronized (LOCK) {
+            ensureLoaded();
+            for (String key : data.gravityPlaced) data.buttonAnchor.remove(key);
+            data.gravityPlaced.clear();
+            save();
+        }
+    }
+
+    /** Called when the player manually grabs a gravity-piled button -- it's a real drag target
+     *  now, so a later gravity-off toggle shouldn't snap it back to the grid. */
+    public static void unmarkGravityPlaced(String key) {
+        synchronized (LOCK) {
+            ensureLoaded();
+            if (data.gravityPlaced.remove(key)) save();
         }
     }
 

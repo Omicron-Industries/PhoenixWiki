@@ -18,7 +18,7 @@ public class SuiteHudSettingsScreen extends Screen {
     private static final int ROW_H = 20;
     private static final int PANEL_W = 300;
     private static final int HEADER_H = 46;
-    private static final int FOOTER_H = 28;
+    private static final int FOOTER_H = 50;
 
     private int panelX, panelY, panelW, panelH;
 
@@ -91,16 +91,29 @@ public class SuiteHudSettingsScreen extends Screen {
             y += ROW_H;
         }
 
+        this.addRenderableWidget(Button.builder(Component.literal(SuiteHudBar.isGravityMode() ?
+                        "§a🪂 Gravity mode: ON" : "§8🪂 Gravity mode: OFF"),
+                        b -> {
+                            SuiteHudBar.setGravityMode(!SuiteHudBar.isGravityMode());
+                            this.init();
+                        })
+                .bounds(panelX + 20, panelY + panelH - FOOTER_H + 6, panelW - 40, 16)
+                .tooltip(Tooltip.create(Component.literal(
+                        "Drops every HUD button -- wherever it's currently sitting -- to the\n" +
+                                "bottom of the screen, piling up like dropped items. Turning it off\n" +
+                                "puts dropped buttons back in the grid.")))
+                .build());
+
         this.addRenderableWidget(Button.builder(Component.literal("§7Reset positions"), b -> {
                     SuiteHudBar.resetAllButtonPositions();
                     this.init();
                 })
-                .bounds(panelX + 20, panelY + panelH - FOOTER_H + 6, 110, 16)
+                .bounds(panelX + 20, panelY + panelH - FOOTER_H + 28, 110, 16)
                 .tooltip(Tooltip.create(Component.literal("Put every dragged HUD button back in its default spot")))
                 .build());
 
         this.addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose())
-                .bounds(panelX + panelW - 100, panelY + panelH - FOOTER_H + 6, 80, 16)
+                .bounds(panelX + panelW - 100, panelY + panelH - FOOTER_H + 28, 80, 16)
                 .build());
     }
 

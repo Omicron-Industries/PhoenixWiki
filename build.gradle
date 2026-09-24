@@ -28,6 +28,11 @@ repositories {
     flatDir {
         dir 'libs'
     }
+    maven {
+        // EMI
+        name = "TerraformersMC"
+        url = "https://maven.terraformersmc.com/"
+    }
 }
 
 version = mod_version
@@ -76,6 +81,9 @@ legacyForge {
 
 dependencies {
     compileOnly("org.jetbrains:annotations:26.0.1")
+   // modRuntimeOnly("dev.emi:emi-forge:${emi_version}+${minecraft_version}")
+    modCompileOnly("dev.emi:emi-forge:${emi_version}+${minecraft_version}")
+
 }
 
 tasks.named('processResources', ProcessResources).configure {

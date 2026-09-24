@@ -39,7 +39,15 @@ public interface RichBlock {
         }
     }
 
-    record Details(String expandKey, String title, List<RichBlock> children) implements RichBlock {
+    /** {@code fakeLoading} is opt-in per block (see {@code :::loading} container syntax) -- shows
+     *  a brief "Consulting the reactor…"-style line before the real content expands, purely
+     *  cosmetic. */
+    record Details(String expandKey, String title, List<RichBlock> children, boolean fakeLoading)
+            implements RichBlock {
+
+        public Details(String expandKey, String title, List<RichBlock> children) {
+            this(expandKey, title, children, false);
+        }
 
         @Override
         public List<RichSpan> spans() {

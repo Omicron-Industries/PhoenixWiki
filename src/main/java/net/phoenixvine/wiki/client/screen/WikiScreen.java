@@ -12,6 +12,7 @@ import net.phoenixvine.wiki.client.rich.RichBlock;
 import net.phoenixvine.wiki.client.rich.RichSpan;
 import net.phoenixvine.wiki.client.rich.WikiMarkdownParser;
 import net.phoenixvine.wiki.client.rich.WikiRichTextRenderer;
+import net.phoenixvine.wiki.client.rich.render.FakeLoadingTimers;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -66,6 +67,11 @@ public class WikiScreen extends Screen {
     private String justCopiedCode = null;
     private long justCopiedAtMs = 0L;
     private static final long COPY_FLASH_MS = 1400L;
+    private long checklistCompleteAtMs = 0L;
+    private static final long CHECKLIST_FLASH_MS = 2200L;
+    /** Set instead of navigating when a target/linked page id doesn't resolve to a real page --
+     *  a synthetic page shown in place of the real content, never added to {@link #pages}. */
+    private WikiPageLoader.Page notFoundPage = null;
     private int sidebarW = DEFAULT_SIDEBAR_W;
     private boolean draggingSidebar = false;
     private final Set<String> expandedKeys = new HashSet<>();
@@ -126,12 +132,15 @@ public class WikiScreen extends Screen {
         if (pages.isEmpty()) {
             pages = WikiPageLoader.loadPages(namespace, basePath);
             if (targetPageId != null) {
+                boolean found = false;
                 for (int i = 0; i < pages.size(); i++) {
                     if (pages.get(i).id().equalsIgnoreCase(targetPageId)) {
                         activePage = i;
+                        found = true;
                         break;
                     }
                 }
+                if (!found) showNotFound(targetPageId);
             }
         }
 
@@ -298,6 +307,10 @@ public class WikiScreen extends Screen {
     }
 
     private List<RichBlock> activeBlocks() {
+        if (notFoundPage != null) {
+            return parsedCache.computeIfAbsent(notFoundPage.id(),
+                    id -> WikiMarkdownParser.parse(notFoundPage.markdown()));
+        }
         if (pages.isEmpty()) return List.of();
         WikiPageLoader.Page page = pages.get(Math.min(activePage, pages.size() - 1));
         return parsedCache.computeIfAbsent(page.id(), id -> {
@@ -305,6 +318,17 @@ public class WikiScreen extends Screen {
             seedChecklistState(id, blocks);
             return blocks;
         });
+    }
+
+    /** Swaps in a synthetic "page not found" page instead of navigating -- used when a target or
+     *  linked page id doesn't resolve to anything in {@link #pages}. */
+    private void showNotFound(String missingId) {
+        String backLink = pages.isEmpty() ? "" :
+                "\n\n[← Back to the welcome page](wiki:" + pages.get(0).id() + ")";
+        notFoundPage = new WikiPageLoader.Page("__wiki_404__", "Page Not Found",
+                "# 💥 404\n\nThis page (`" + missingId + "`) was consumed by the fission reactor." + backLink,
+                "", "");
+        scrollY = 0;
     }
 
     private void seedChecklistState(String pageId, List<RichBlock> blocks) {
@@ -319,6 +343,24 @@ public class WikiScreen extends Screen {
         }
     }
 
+    private boolean isChecked(RichBlock.Checklist cl) {
+        return expandedKeys.contains("CL1:" + cl.checkKey())
+                || !expandedKeys.contains("CL0:" + cl.checkKey()) && cl.checkedDefault();
+    }
+
+    /** True only if the page has at least one checklist item and every one of them is checked --
+     *  matches the exact checked-state formula ChecklistBlockRenderer uses to draw the glyph. */
+    private boolean allChecklistsComplete(List<RichBlock> blocks) {
+        boolean any = false;
+        for (RichBlock b : blocks) {
+            if (b instanceof RichBlock.Checklist cl) {
+                any = true;
+                if (!isChecked(cl)) return false;
+            }
+        }
+        return any;
+    }
+
     private void ensureChecklistTrackerInit() {
         if (WikiChecklistProgress.isInitialized()) return;
         if (minecraft == null) return;
@@ -329,10 +371,12 @@ public class WikiScreen extends Screen {
         for (int i = 0; i < pages.size(); i++) {
             if (pages.get(i).id().equals(pageId)) {
                 activePage = i;
+                notFoundPage = null;
                 scrollY = 0;
                 return;
             }
         }
+        showNotFound(pageId);
     }
 
     private String resolveContent(WikiPageLoader.Page page) {
@@ -375,7 +419,8 @@ public class WikiScreen extends Screen {
 
         g.fill(0, 0, vw, vh, theme.bg());
 
-        String title = pages.isEmpty() ? "Wiki" : pages.get(Math.min(activePage, pages.size() - 1)).title();
+        String title = notFoundPage != null ? notFoundPage.title() :
+                pages.isEmpty() ? "Wiki" : pages.get(Math.min(activePage, pages.size() - 1)).title();
         drawHeader(g, "§fWiki §7" + title);
 
         searchBox.setX(4);
@@ -485,6 +530,24 @@ public class WikiScreen extends Screen {
                         break;
                     }
                 }
+            }
+        }
+
+        if (checklistCompleteAtMs != 0L) {
+            long elapsed = System.currentTimeMillis() - checklistCompleteAtMs;
+            if (elapsed > CHECKLIST_FLASH_MS) {
+                checklistCompleteAtMs = 0L;
+            } else {
+                float t = elapsed / (float) CHECKLIST_FLASH_MS;
+                int alpha = (int) (255 * (t < 0.15f ? t / 0.15f : (1f - (t - 0.15f) / 0.85f))) & 0xFF;
+                String msg = "🪶 Checklist Complete!";
+                int msgX = cx + cw / 2 - font.width(msg) / 2;
+                int msgY = contentTop + 4;
+                g.pose().pushPose();
+                g.pose().translate(0f, 0f, 400f);
+                g.fill(msgX - 6, msgY - 3, msgX + font.width(msg) + 6, msgY + 11, (alpha / 2 << 24) | 0x225522);
+                g.drawString(font, msg, msgX, msgY, (alpha << 24) | 0xFFFFFF, false);
+                g.pose().popPose();
             }
         }
 
@@ -658,10 +721,16 @@ public class WikiScreen extends Screen {
                     return true;
                 }
                 if (r.span() instanceof RichSpan.DetailsToggle dt) {
-                    if (!expandedKeys.remove(dt.key())) expandedKeys.add(dt.key());
+                    if (!expandedKeys.remove(dt.key())) {
+                        expandedKeys.add(dt.key());
+                        FakeLoadingTimers.start(dt.key());
+                    }
                     return true;
                 }
                 if (r.span() instanceof RichSpan.ChecklistToggle ct) {
+                    List<RichBlock> blocksForPage = activeBlocks();
+                    boolean wasComplete = allChecklistsComplete(blocksForPage);
+
                     boolean current = expandedKeys.contains("CL1:" + ct.key())
                             || (!expandedKeys.contains("CL0:" + ct.key()) && ct.checkedDefault());
                     boolean next = !current;
@@ -671,6 +740,10 @@ public class WikiScreen extends Screen {
                     if (!pages.isEmpty()) {
                         WikiPageLoader.Page page = pages.get(Math.min(activePage, pages.size() - 1));
                         WikiChecklistProgress.setChecked(namespace, page.id(), ct.key(), next);
+                    }
+
+                    if (!wasComplete && allChecklistsComplete(blocksForPage)) {
+                        checklistCompleteAtMs = System.currentTimeMillis();
                     }
                     return true;
                 }
