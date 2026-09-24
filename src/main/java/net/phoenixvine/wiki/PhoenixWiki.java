@@ -1,28 +1,19 @@
 package net.phoenixvine.wiki;
 
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.phoenixvine.wiki.client.suite.SuiteHudConfig;
-import net.phoenixvine.wiki.theme.PhoenixTheme;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.mojang.logging.LogUtils;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import org.slf4j.Logger;
 
 @Mod(PhoenixWiki.MOD_ID)
 public class PhoenixWiki {
 
     public static final String MOD_ID = "phoenix_wiki";
-    public static final Logger LOGGER = LogManager.getLogger("PhoenixWiki");
+    public static final Logger LOGGER = LogUtils.getLogger();
 
-    public PhoenixWiki(FMLJavaModLoadingContext context) {
+    public PhoenixWiki(IEventBus modEventBus, ModContainer modContainer) {
         LOGGER.info("Phoenix Wiki loaded (library mod. see PhoenixWikiAPI to open a wiki screen)");
 
-        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> context.getModEventBus()
-                .addListener((FMLClientSetupEvent event) -> {
-                    PhoenixTheme.loadThemes();
-                    SuiteHudConfig.init();
-                }));
     }
 }

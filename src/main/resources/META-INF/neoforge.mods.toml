@@ -1,5 +1,5 @@
 modLoader = "javafml"
-loaderVersion = "[47,)"
+loaderVersion = "[1,)"
 license = "${mod_license}"
 
 [[mods]]
@@ -15,9 +15,9 @@ PhoenixWikiAPI to open a wiki backed by their own assets/<namespace>/wiki/<local
 '''
 
     [[dependencies.${mod_id}]]
-        modId = "forge"
+        modId = "neoforge"
         mandatory = true
-        versionRange = "[${forge_version},)"
+        versionRange = "[${neoforge_version},)"
         ordering = "NONE"
         side = "BOTH"
     [[dependencies.${mod_id}]]

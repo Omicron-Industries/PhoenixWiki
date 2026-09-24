@@ -3,12 +3,12 @@ package net.phoenixvine.wiki.client.rich.render;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
 import net.phoenixvine.wiki.client.rich.RichSpan;
 import net.phoenixvine.wiki.client.rich.WikiRichTextRenderer;
 
@@ -144,7 +144,7 @@ public final class SpanRenderer {
                 }
                 int iconY = curY[0] - (16 - lineH) / 2;
                 if (iconY >= clipTop && iconY + 16 <= clipBot) {
-                    Item item = ForgeRegistries.ITEMS.getValue(icon.itemId());
+                    Item item = BuiltInRegistries.ITEM.get(icon.itemId());
                     if (item != null) {
                         try {
                             g.renderItem(new ItemStack(item), curX, iconY);

@@ -1,6 +1,6 @@
 package net.phoenixvine.wiki.client.screen;
 
-import net.minecraft.SharedConstants;
+import net.minecraft.util.StringUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -483,9 +483,9 @@ public class MultilineTextArea extends AbstractWidget {
     }
 
     @Override
-    public boolean mouseScrolled(double mx, double my, double delta) {
+    public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
         if (mx < getX() || mx >= getX() + width || my < getY() || my >= getY() + height) return false;
-        return scrollBy(delta);
+        return scrollBy(scrollY);
     }
 
     public boolean scrollBy(double delta) {
@@ -665,7 +665,7 @@ public class MultilineTextArea extends AbstractWidget {
     @Override
     public boolean charTyped(char ch, int mods) {
         if (!isFocused()) return false;
-        if (!SharedConstants.isAllowedChatCharacter(ch)) return false;
+        if (!StringUtil.isAllowedChatCharacter(ch)) return false;
 
         if (searchActive) {
             searchQuery += ch;
