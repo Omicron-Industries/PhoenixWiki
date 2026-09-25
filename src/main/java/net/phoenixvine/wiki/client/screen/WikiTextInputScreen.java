@@ -114,6 +114,9 @@ public class WikiTextInputScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {}
+
+    @Override
     public void render(GuiGraphics g, int rmx, int rmy, float partial) {
         g.fill(0, 0, width, height, C_BG);
 
